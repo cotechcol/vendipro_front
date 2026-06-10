@@ -6,7 +6,7 @@ import api from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
-import { formatMoney, formatDate } from '@/utils/format'
+import { formatMoney, formatDate, todayColombia, daysAgoColombia } from '@/utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler)
 
@@ -26,11 +26,8 @@ interface Summary { count: number; revenue: number; profit: number; tax: number 
 interface ProductRow { name: string; category: string; quantity: number; revenue: number; cost: number; profit: number; margin: number }
 interface ProductSummary { totalProducts: number; totalUnits: number; revenue: number; profit: number }
 
-function today() { return new Date().toISOString().slice(0, 10) }
-function getWeekAgo() {
-  const d = new Date(); d.setDate(d.getDate() - 7)
-  return d.toISOString().slice(0, 10)
-}
+function today() { return todayColombia() }
+function getWeekAgo() { return daysAgoColombia(7) }
 
 const tabs = computed(() => {
   const all = [

@@ -1,3 +1,5 @@
+const COLOMBIA_TZ = 'America/Bogota'
+
 /** Convierte string/number a número seguro (MySQL devuelve decimales como string) */
 export function toNumber(value: number | string | null | undefined): number {
   if (value === null || value === undefined) return 0
@@ -31,6 +33,7 @@ export function formatQuantity(value: number | string): string {
 
 export function formatDate(date: string | Date): string {
   return new Date(date).toLocaleString('es-CO', {
+    timeZone: COLOMBIA_TZ,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -41,8 +44,21 @@ export function formatDate(date: string | Date): string {
 
 export function formatDateShort(date: string | Date): string {
   return new Date(date).toLocaleDateString('es-CO', {
+    timeZone: COLOMBIA_TZ,
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   })
+}
+
+/** Fecha actual en Colombia (YYYY-MM-DD) */
+export function todayColombia(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: COLOMBIA_TZ }).format(new Date())
+}
+
+/** Fecha N días atrás en Colombia (YYYY-MM-DD) */
+export function daysAgoColombia(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: COLOMBIA_TZ }).format(d)
 }
