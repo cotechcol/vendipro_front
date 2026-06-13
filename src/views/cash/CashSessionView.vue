@@ -64,6 +64,10 @@ async function loadHistory() {
   loading.value = true
   try {
     await app.fetchCashSession()
+    if (!auth.isAdmin) {
+      history.value = []
+      return
+    }
     const { data } = await api.get('/cash-sessions', { params: { limit: 30 } })
     history.value = data.data
   } finally {
@@ -128,7 +132,7 @@ onMounted(loadHistory)
 
 <template>
   <div class="space-y-6">
-    <PageHeader title="Caja" subtitle="Apertura, cierre e historial de turnos">
+    <PageHeader title="Caja" :subtitle="auth.isAdmin ? 'Apertura, cierre e historial de turnos' : 'Apertura y cierre de tu turno'">
       <template #actions>
         <button v-if="!app.cashSession" class="btn-primary" @click="showOpenModal = true">Abrir caja</button>
         <button v-else class="btn-primary !bg-red-600 hover:!bg-red-700" @click="showCloseModal = true">Cerrar caja</button>
@@ -150,7 +154,7 @@ onMounted(loadHistory)
         </div>
       </div>
       <div class="p-6">
-        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="grid grid-cols-2 gap-4" :class="auth.isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'">
           <div>
             <p class="text-xs text-slate-500 uppercase tracking-wide">Fondo inicial</p>
             <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(app.cashSession.openingAmount) }}</p>
@@ -167,7 +171,7 @@ onMounted(loadHistory)
             <p class="text-xs text-slate-500 uppercase tracking-wide">Efectivo</p>
             <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(currentSummary.cashTotal) }}</p>
           </div>
-          <div v-if="currentSummary">
+          <div v-if="currentSummary && auth.isAdmin">
             <p class="text-xs text-slate-500 uppercase tracking-wide">Esperado en caja</p>
             <p class="text-xl font-bold text-brand-600 mt-1">{{ formatMoney(toNumber(app.cashSession.openingAmount) + currentSummary.cashTotal) }}</p>
           </div>
@@ -183,8 +187,8 @@ onMounted(loadHistory)
       <button class="btn-primary" @click="showOpenModal = true">Abrir caja</button>
     </div>
 
-    <!-- Historial -->
-    <div class="card overflow-hidden">
+    <!-- Historial (solo admin) -->
+    <div v-if="auth.isAdmin" class="card overflow-hidden">
       <div class="card-header flex justify-between items-center">
         <div>
           <h3 class="font-semibold text-slate-900">Historial de cajas</h3>
@@ -267,13 +271,17 @@ onMounted(loadHistory)
     <!-- Modal cerrar -->
     <AppModal :show="showCloseModal" title="Cerrar caja" @close="showCloseModal = false">
       <div class="space-y-4">
-        <div v-if="currentSummary" class="bg-slate-50 rounded-xl p-4 text-sm space-y-2">
+        <div v-if="currentSummary && auth.isAdmin" class="bg-slate-50 rounded-xl p-4 text-sm space-y-2">
           <div class="flex justify-between"><span class="text-slate-500">Fondo inicial</span><span class="font-medium">{{ formatMoney(app.cashSession!.openingAmount) }}</span></div>
           <div class="flex justify-between"><span class="text-slate-500">+ Ventas efectivo</span><span class="font-medium">{{ formatMoney(currentSummary.cashTotal) }}</span></div>
           <div class="flex justify-between border-t border-slate-200 pt-2 font-bold">
             <span>Esperado en caja</span>
             <span class="text-brand-600">{{ formatMoney(toNumber(app.cashSession!.openingAmount) + currentSummary.cashTotal) }}</span>
           </div>
+        </div>
+        <div v-else-if="currentSummary" class="bg-slate-50 rounded-xl p-4 text-sm space-y-2">
+          <div class="flex justify-between"><span class="text-slate-500">Fondo inicial</span><span class="font-medium">{{ formatMoney(app.cashSession!.openingAmount) }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Ventas en efectivo</span><span class="font-medium">{{ formatMoney(currentSummary.cashTotal) }}</span></div>
         </div>
         <div>
           <label class="text-sm font-medium text-slate-700">Monto contado en caja</label>
