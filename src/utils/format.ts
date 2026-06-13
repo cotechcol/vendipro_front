@@ -1,5 +1,15 @@
 const COLOMBIA_TZ = 'America/Bogota'
 
+/** Parsea fechas del API (MySQL/Vercel envía UTC sin indicador Z) */
+export function parseApiDate(date: string | Date): Date {
+  if (date instanceof Date) return date
+  const normalized = date.trim().replace(' ', 'T')
+  if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(normalized)) {
+    return new Date(normalized)
+  }
+  return new Date(`${normalized}Z`)
+}
+
 /** Convierte string/number a número seguro (MySQL devuelve decimales como string) */
 export function toNumber(value: number | string | null | undefined): number {
   if (value === null || value === undefined) return 0
@@ -32,7 +42,7 @@ export function formatQuantity(value: number | string): string {
 }
 
 export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleString('es-CO', {
+  return parseApiDate(date).toLocaleString('es-CO', {
     timeZone: COLOMBIA_TZ,
     day: '2-digit',
     month: '2-digit',
@@ -43,7 +53,7 @@ export function formatDate(date: string | Date): string {
 }
 
 export function formatDateShort(date: string | Date): string {
-  return new Date(date).toLocaleDateString('es-CO', {
+  return parseApiDate(date).toLocaleDateString('es-CO', {
     timeZone: COLOMBIA_TZ,
     day: '2-digit',
     month: 'short',
