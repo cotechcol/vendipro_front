@@ -13,7 +13,7 @@ interface SessionSummary {
   totalSales: number
   totalRevenue: number
   totalProfit: number
-  cashTotal: number
+  cashTotal?: number
   cardTotal: number
 }
 
@@ -154,7 +154,7 @@ onMounted(loadHistory)
         </div>
       </div>
       <div class="p-6">
-        <div class="grid grid-cols-2 gap-4" :class="auth.isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'">
+        <div class="grid grid-cols-2 gap-4" :class="auth.isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-3'">
           <div>
             <p class="text-xs text-slate-500 uppercase tracking-wide">Fondo inicial</p>
             <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(app.cashSession.openingAmount) }}</p>
@@ -167,13 +167,13 @@ onMounted(loadHistory)
             <p class="text-xs text-slate-500 uppercase tracking-wide">Ingresos</p>
             <p class="text-xl font-bold text-emerald-600 mt-1">{{ formatMoney(currentSummary.totalRevenue) }}</p>
           </div>
-          <div v-if="currentSummary">
+          <div v-if="currentSummary && auth.isAdmin">
             <p class="text-xs text-slate-500 uppercase tracking-wide">Efectivo</p>
-            <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(currentSummary.cashTotal) }}</p>
+            <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(currentSummary.cashTotal ?? 0) }}</p>
           </div>
           <div v-if="currentSummary && auth.isAdmin">
             <p class="text-xs text-slate-500 uppercase tracking-wide">Esperado en caja</p>
-            <p class="text-xl font-bold text-brand-600 mt-1">{{ formatMoney(toNumber(app.cashSession.openingAmount) + currentSummary.cashTotal) }}</p>
+            <p class="text-xl font-bold text-brand-600 mt-1">{{ formatMoney(toNumber(app.cashSession.openingAmount) + (currentSummary.cashTotal ?? 0)) }}</p>
           </div>
         </div>
       </div>
@@ -273,15 +273,14 @@ onMounted(loadHistory)
       <div class="space-y-4">
         <div v-if="currentSummary && auth.isAdmin" class="bg-slate-50 rounded-xl p-4 text-sm space-y-2">
           <div class="flex justify-between"><span class="text-slate-500">Fondo inicial</span><span class="font-medium">{{ formatMoney(app.cashSession!.openingAmount) }}</span></div>
-          <div class="flex justify-between"><span class="text-slate-500">+ Ventas efectivo</span><span class="font-medium">{{ formatMoney(currentSummary.cashTotal) }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">+ Ventas efectivo</span><span class="font-medium">{{ formatMoney(currentSummary.cashTotal ?? 0) }}</span></div>
           <div class="flex justify-between border-t border-slate-200 pt-2 font-bold">
             <span>Esperado en caja</span>
-            <span class="text-brand-600">{{ formatMoney(toNumber(app.cashSession!.openingAmount) + currentSummary.cashTotal) }}</span>
+            <span class="text-brand-600">{{ formatMoney(toNumber(app.cashSession!.openingAmount) + (currentSummary.cashTotal ?? 0)) }}</span>
           </div>
         </div>
-        <div v-else-if="currentSummary" class="bg-slate-50 rounded-xl p-4 text-sm space-y-2">
+        <div v-else-if="!auth.isAdmin && app.cashSession" class="bg-slate-50 rounded-xl p-4 text-sm">
           <div class="flex justify-between"><span class="text-slate-500">Fondo inicial</span><span class="font-medium">{{ formatMoney(app.cashSession!.openingAmount) }}</span></div>
-          <div class="flex justify-between"><span class="text-slate-500">Ventas en efectivo</span><span class="font-medium">{{ formatMoney(currentSummary.cashTotal) }}</span></div>
         </div>
         <div>
           <label class="text-sm font-medium text-slate-700">Monto contado en caja</label>
@@ -306,7 +305,7 @@ onMounted(loadHistory)
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <StatCard title="Ventas" :value="detailSummary.totalSales" icon="🧾" color="brand" />
           <StatCard title="Ingresos" :value="formatMoney(detailSummary.totalRevenue)" icon="💵" color="blue" />
-          <StatCard title="Efectivo" :value="formatMoney(detailSummary.cashTotal)" icon="◆" color="amber" />
+          <StatCard title="Efectivo" :value="formatMoney(detailSummary.cashTotal ?? 0)" icon="◆" color="amber" />
           <StatCard title="Tarjeta" :value="formatMoney(detailSummary.cardTotal)" icon="💳" color="purple" />
         </div>
 
