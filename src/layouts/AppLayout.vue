@@ -150,6 +150,12 @@ watch(() => storeStore.activeStoreId, loadStoreData)
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           Caja abierta
         </div>
+        <RouterLink
+          to="/account"
+          class="block w-full text-sm text-slate-500 hover:text-white transition-colors py-2 px-2 rounded-lg hover:bg-white/5 mb-1"
+        >
+          Mi cuenta
+        </RouterLink>
         <button
           class="w-full text-sm text-slate-500 hover:text-white transition-colors py-2 px-2 rounded-lg hover:bg-white/5"
           @click="handleLogout"
@@ -212,6 +218,13 @@ watch(() => storeStore.activeStoreId, loadStoreData)
               <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Caja abierta
             </div>
+            <RouterLink
+              to="/account"
+              class="block w-full text-sm text-slate-400 hover:text-white transition-colors py-2.5 px-2 rounded-lg hover:bg-white/5 mb-1"
+              @click="sidebarOpen = false"
+            >
+              Mi cuenta
+            </RouterLink>
             <button
               class="w-full text-sm text-red-300 hover:text-white transition-colors py-2.5 px-2 rounded-lg hover:bg-red-500/20 border border-red-500/30"
               @click="handleLogout"

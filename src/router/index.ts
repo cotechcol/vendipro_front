@@ -28,6 +28,7 @@ const router = createRouter({
         { path: 'stores', name: 'stores', component: () => import('@/views/stores/StoresView.vue'), meta: { superAdminOnly: true } },
         { path: 'users', name: 'users', component: () => import('@/views/users/UsersView.vue'), meta: { adminOnly: true } },
         { path: 'settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue'), meta: { adminOnly: true } },
+        { path: 'account', name: 'account', component: () => import('@/views/account/AccountView.vue') },
       ],
     },
   ],
