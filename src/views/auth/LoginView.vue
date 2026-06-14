@@ -16,8 +16,19 @@ async function handleLogin() {
   try {
     await auth.login(email.value, password.value)
     router.push('/')
-  } catch {
-    error.value = 'Credenciales inválidas. Verifica tu email y contraseña.'
+  } catch (e: unknown) {
+    const err = e as { response?: { status?: number; data?: { message?: string | string[] } }; message?: string }
+    const status = err.response?.status
+    const msg = err.response?.data?.message
+    if (status === 500 || !err.response) {
+      error.value = 'No se pudo conectar con el servidor. Verifica que el backend esté activo.'
+    } else if (Array.isArray(msg)) {
+      error.value = msg.join(', ')
+    } else if (typeof msg === 'string') {
+      error.value = msg
+    } else {
+      error.value = 'Credenciales inválidas. Verifica tu email y contraseña.'
+    }
   }
 }
 </script>
