@@ -69,6 +69,38 @@ export function formatStock(stock: number | string, unit: string = 'unit'): stri
   return `${formatNumber(n, 0)} uds`
 }
 
+const unitLabels: Record<string, string> = {
+  g: 'Gramos',
+  ml: 'Mililitros',
+  unit: 'Unidades',
+}
+
+export function stockUnitLabel(unit: string = 'unit'): string {
+  return unitLabels[unit] ?? unit
+}
+
+/** Cantidad de un movimiento con signo y unidad correcta */
+export function formatMovementQty(
+  quantity: number | string,
+  unit: string = 'unit',
+  outflow = false,
+): string {
+  const n = toNumber(quantity)
+  const sign = outflow ? '−' : '+'
+  if (unit === 'g') return `${sign}${formatNumber(n, n % 1 ? 1 : 0)} g`
+  if (unit === 'ml') return `${sign}${formatNumber(n, n % 1 ? 1 : 0)} ml`
+  return `${sign}${formatNumber(n, 0)} uds`
+}
+
+/** Rango de stock antes → después con unidad */
+export function formatMovementStock(
+  before: number | string,
+  after: number | string,
+  unit: string = 'unit',
+): string {
+  return `${formatStock(before, unit)} → ${formatStock(after, unit)}`
+}
+
 export function productTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     simple: 'Unidad',

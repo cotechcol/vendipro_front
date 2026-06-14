@@ -5,7 +5,7 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
-import { formatMoney, formatDate, formatStock, formatQuantity } from '@/utils/format'
+import { formatMoney, formatDate, formatStock, formatQuantity, formatMovementQty, formatMovementStock, stockUnitLabel } from '@/utils/format'
 import type { Product, Category } from '@/types'
 
 interface Movement {
@@ -14,10 +14,19 @@ interface Movement {
   quantity: number
   stockBefore: number
   stockAfter: number
+  reference?: string
   notes?: string
   createdAt: string
   product: Product
   user?: { name: string }
+}
+
+interface MovementGroup {
+  id: string
+  createdAt: string
+  type: string
+  reference?: string
+  movements: Movement[]
 }
 
 interface InventorySummary {
@@ -109,6 +118,46 @@ const filteredMovements = computed(() => {
   if (!movementProductFilter.value) return movements.value
   return movements.value.filter((m) => m.product?.id === movementProductFilter.value)
 })
+
+const movementGroups = computed((): MovementGroup[] => {
+  const list = filteredMovements.value
+  const groups: MovementGroup[] = []
+  const usedRefs = new Set<string>()
+
+  for (const m of list) {
+    if (m.type === 'sale' && m.reference && !usedRefs.has(m.reference)) {
+      const related = list.filter((x) => x.reference === m.reference && x.type === 'sale')
+      if (related.length > 1) {
+        usedRefs.add(m.reference)
+        groups.push({
+          id: m.reference,
+          createdAt: m.createdAt,
+          type: m.type,
+          reference: m.reference,
+          movements: related,
+        })
+        continue
+      }
+    }
+    if (m.reference && usedRefs.has(m.reference)) continue
+    groups.push({
+      id: String(m.id),
+      createdAt: m.createdAt,
+      type: m.type,
+      reference: m.reference,
+      movements: [m],
+    })
+  }
+  return groups
+})
+
+function isOutflow(type: string): boolean {
+  return type === 'sale' || type === 'adjustment_out'
+}
+
+function productUnit(m: Movement): string {
+  return m.product?.stockUnit ?? 'unit'
+}
 
 function stockPercent(p: Product) {
   const stock = Number(p.stock)
@@ -347,6 +396,7 @@ onMounted(load)
             <tr>
               <th class="text-left px-4 py-3 font-medium">Fecha</th>
               <th class="text-left px-4 py-3 font-medium">Producto</th>
+              <th class="text-left px-4 py-3 font-medium hidden lg:table-cell">Unidad</th>
               <th class="text-left px-4 py-3 font-medium">Tipo</th>
               <th class="text-right px-4 py-3 font-medium">Cantidad</th>
               <th class="text-right px-4 py-3 font-medium hidden sm:table-cell">Stock</th>
@@ -354,35 +404,67 @@ onMounted(load)
             </tr>
           </thead>
           <tbody>
-            <tr v-if="filteredMovements.length === 0">
-              <td colspan="6" class="px-4 py-12 text-center text-slate-400">Sin movimientos registrados</td>
+            <tr v-if="movementGroups.length === 0">
+              <td colspan="7" class="px-4 py-12 text-center text-slate-400">Sin movimientos registrados</td>
             </tr>
-            <tr
-              v-for="m in filteredMovements"
-              :key="m.id"
-              class="border-t border-slate-100 hover:bg-slate-50/80"
-            >
-              <td class="px-4 py-3 text-slate-500 whitespace-nowrap">{{ formatDate(m.createdAt) }}</td>
-              <td class="px-4 py-3">
-                <p class="font-medium">{{ m.product?.name }}</p>
-              </td>
-              <td class="px-4 py-3">
-                <span :class="['text-xs font-medium px-2.5 py-1 rounded-full', typeStyles[m.type] || 'bg-slate-100 text-slate-600']">
-                  {{ typeLabels[m.type] || m.type }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-right font-semibold tabular-nums">
-                <span :class="m.type === 'sale' || m.type === 'adjustment_out' ? 'text-red-600' : 'text-green-600'">
-                  {{ m.type === 'sale' || m.type === 'adjustment_out' ? '-' : '+' }}{{ m.quantity }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-right text-slate-500 tabular-nums hidden sm:table-cell">
-                {{ m.stockBefore }} → {{ m.stockAfter }}
-              </td>
-              <td class="px-4 py-3 text-slate-400 text-xs hidden md:table-cell truncate max-w-[200px]">
-                {{ m.notes || '—' }}
-              </td>
-            </tr>
+            <template v-for="group in movementGroups" :key="group.id">
+              <tr
+                v-if="group.movements.length > 1"
+                class="border-t border-slate-200 bg-slate-50/80"
+              >
+                <td class="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs font-medium">
+                  {{ formatDate(group.createdAt) }}
+                </td>
+                <td class="px-4 py-2.5 text-slate-700 text-xs font-semibold" colspan="2">
+                  Venta · {{ group.movements.length }} insumos descontados
+                </td>
+                <td class="px-4 py-2.5">
+                  <span :class="['text-xs font-medium px-2.5 py-1 rounded-full', typeStyles[group.type] || 'bg-slate-100 text-slate-600']">
+                    {{ typeLabels[group.type] || group.type }}
+                  </span>
+                </td>
+                <td colspan="3" />
+              </tr>
+              <tr
+                v-for="m in group.movements"
+                :key="m.id"
+                :class="[
+                  'border-t border-slate-100 hover:bg-slate-50/80',
+                  group.movements.length > 1 ? 'bg-white' : '',
+                ]"
+              >
+                <td class="px-4 py-3 text-slate-500 whitespace-nowrap">
+                  <span v-if="group.movements.length === 1">{{ formatDate(m.createdAt) }}</span>
+                  <span v-else class="pl-3 text-slate-300">↳</span>
+                </td>
+                <td class="px-4 py-3" :class="group.movements.length > 1 ? 'pl-8' : ''">
+                  <p class="font-medium">{{ m.product?.name }}</p>
+                  <p class="text-xs text-slate-400 font-mono">{{ m.product?.sku }}</p>
+                </td>
+                <td class="px-4 py-3 text-slate-500 text-xs hidden lg:table-cell">
+                  {{ stockUnitLabel(productUnit(m)) }}
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    v-if="group.movements.length === 1"
+                    :class="['text-xs font-medium px-2.5 py-1 rounded-full', typeStyles[m.type] || 'bg-slate-100 text-slate-600']"
+                  >
+                    {{ typeLabels[m.type] || m.type }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-right font-semibold tabular-nums">
+                  <span :class="isOutflow(m.type) ? 'text-red-600' : 'text-green-600'">
+                    {{ formatMovementQty(m.quantity, productUnit(m), isOutflow(m.type)) }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-right text-slate-500 tabular-nums hidden sm:table-cell text-xs">
+                  {{ formatMovementStock(m.stockBefore, m.stockAfter, productUnit(m)) }}
+                </td>
+                <td class="px-4 py-3 text-slate-400 text-xs hidden md:table-cell truncate max-w-[200px]">
+                  {{ m.notes || '—' }}
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
