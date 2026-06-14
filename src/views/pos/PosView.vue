@@ -94,13 +94,41 @@ function printTicket() {
   if (el) printHtmlElement(el)
 }
 
-function handleProductClick(p: Product) {
+function hasConfigurableOptions(p: Product): boolean {
+  return (p.optionGroups?.length ?? 0) > 0 || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
+}
+
+async function handleProductClick(p: Product) {
   if (processing.value) return
-  if (p.optionGroups?.length) {
-    optionsProduct.value = p
+
+  let product = p
+  if (!p.optionGroups?.length && p.scoopCount) {
+    try {
+      const { data } = await api.get<Product>(`/products/${p.id}`)
+      product = data
+      const idx = products.value.findIndex((x) => x.id === p.id)
+      if (idx >= 0) products.value[idx] = { ...products.value[idx], ...data }
+    } catch {
+      toast.value = { show: true, message: 'No se pudo cargar las opciones del producto', type: 'error' }
+      return
+    }
+  }
+
+  if (product.optionGroups?.length) {
+    optionsProduct.value = product
     showOptions.value = true
     return
   }
+
+  if (p.scoopCount) {
+    toast.value = {
+      show: true,
+      message: 'Este helado no tiene sabores configurados. Configúralo en Productos → editar → "Con sabores y envase".',
+      type: 'error',
+    }
+    return
+  }
+
   cart.addProduct(p)
 }
 
@@ -169,6 +197,9 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
           >
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
+            <p v-if="hasConfigurableOptions(p)" class="text-xs text-primary-600 font-medium mt-1">
+              Toca para elegir sabor y envase
+            </p>
             <div class="flex justify-between items-end mt-2">
               <span class="text-primary-600 font-bold">{{ formatMoney(Number(p.salePrice)) }}</span>
               <span class="text-xs text-slate-400">{{ p.sellableUnits ?? p.stock }} disp.</span>
