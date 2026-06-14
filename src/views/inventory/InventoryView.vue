@@ -5,7 +5,7 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
-import { formatMoney, formatDate, formatStock } from '@/utils/format'
+import { formatMoney, formatDate, formatStock, formatQuantity } from '@/utils/format'
 import type { Product, Category } from '@/types'
 
 interface Movement {
@@ -23,6 +23,7 @@ interface Movement {
 interface InventorySummary {
   totalProducts: number
   totalUnits: number
+  bulkInsumos?: number
   inventoryCost: number
   inventoryRetail: number
 }
@@ -110,8 +111,10 @@ const filteredMovements = computed(() => {
 })
 
 function stockPercent(p: Product) {
-  if (p.minStock <= 0) return p.stock > 0 ? 100 : 0
-  return Math.min(100, Math.round((p.stock / (p.minStock * 2)) * 100))
+  const stock = Number(p.stock)
+  const min = Number(p.minStock)
+  if (min <= 0) return stock > 0 ? 100 : 0
+  return Math.min(100, Math.round((stock / (min * 2)) * 100))
 }
 
 function stockBarColor(p: Product) {
@@ -180,7 +183,13 @@ onMounted(load)
     <!-- Stats -->
     <div v-if="summary" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard title="Productos" :value="summary.totalProducts" icon="📦" color="blue" />
-      <StatCard title="Unidades en stock" :value="summary.totalUnits" icon="📊" color="brand" />
+      <StatCard
+        title="Unidades en stock"
+        :value="formatQuantity(summary.totalUnits)"
+        :trend="summary.bulkInsumos ? `${summary.bulkInsumos} insumos base (g/ml)` : undefined"
+        icon="📊"
+        color="brand"
+      />
       <StatCard title="Valor costo" :value="formatMoney(summary.inventoryCost)" icon="💰" color="amber" />
       <StatCard title="Stock bajo" :value="lowStock.length" icon="⚠️" color="red" />
     </div>
@@ -299,7 +308,7 @@ onMounted(load)
                 {{ p.productType === 'bulk' || p.productType === 'simple' ? formatStock(p.minStock, p.stockUnit) : '—' }}
               </td>
               <td class="px-4 py-3 text-right text-slate-600 hidden lg:table-cell tabular-nums">
-                {{ formatMoney(Number(p.costPrice) * p.stock) }}
+                {{ formatMoney(Number(p.costPrice) * Number(p.stock)) }}
               </td>
               <td class="px-4 py-3 text-center">
                 <span :class="['text-xs font-medium px-2.5 py-1 rounded-full', statusStyles[stockStatus(p)]]">
