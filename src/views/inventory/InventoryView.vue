@@ -5,7 +5,7 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
-import { formatMoney, formatDate } from '@/utils/format'
+import { formatMoney, formatDate, formatStock } from '@/utils/format'
 import type { Product, Category } from '@/types'
 
 interface Movement {
@@ -59,10 +59,28 @@ const typeStyles: Record<string, string> = {
 }
 
 function stockStatus(p: Product): 'ok' | 'low' | 'out' {
-  if (p.stock <= 0) return 'out'
-  if (p.stock <= p.minStock) return 'low'
+  const stock = Number(p.stock)
+  const min = Number(p.minStock)
+  if (p.productType === 'portion' || p.productType === 'composite') {
+    const avail = p.sellableUnits ?? 0
+    if (avail <= 0) return 'out'
+    return 'ok'
+  }
+  if (stock <= 0) return 'out'
+  if (stock <= min) return 'low'
   return 'ok'
 }
+
+function stockLabel(p: Product): string {
+  if (p.productType === 'portion' || p.productType === 'composite') {
+    return `${p.sellableUnits ?? 0} disp.`
+  }
+  return formatStock(p.stock, p.stockUnit)
+}
+
+const adjustableProducts = computed(() =>
+  products.value.filter((p) => p.productType === 'simple' || p.productType === 'bulk'),
+)
 
 const statusLabels = { ok: 'Normal', low: 'Bajo', out: 'Agotado' }
 const statusStyles = {
@@ -187,7 +205,7 @@ onMounted(load)
               @click="openAdjust(p)"
             >
               {{ p.name }}
-              <span class="text-red-600 font-medium ml-1">{{ p.stock }}/{{ p.minStock }}</span>
+              <span class="text-red-600 font-medium ml-1">{{ stockLabel(p) }}</span>
             </button>
           </div>
         </div>
@@ -276,8 +294,10 @@ onMounted(load)
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ p.stock }}</td>
-              <td class="px-4 py-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">{{ p.minStock }}</td>
+              <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ stockLabel(p) }}</td>
+              <td class="px-4 py-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
+                {{ p.productType === 'bulk' || p.productType === 'simple' ? formatStock(p.minStock, p.stockUnit) : '—' }}
+              </td>
               <td class="px-4 py-3 text-right text-slate-600 hidden lg:table-cell tabular-nums">
                 {{ formatMoney(Number(p.costPrice) * p.stock) }}
               </td>
@@ -288,6 +308,7 @@ onMounted(load)
               </td>
               <td class="px-4 py-3 text-right">
                 <button
+                  v-if="p.productType === 'simple' || p.productType === 'bulk'"
                   class="text-primary-600 hover:text-primary-700 text-xs font-medium hover:underline"
                   @click="openAdjust(p)"
                 >
@@ -365,8 +386,8 @@ onMounted(load)
           <label class="text-sm font-medium text-slate-700">Producto</label>
           <select v-model.number="form.productId" class="w-full mt-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm">
             <option :value="0" disabled>Seleccionar producto...</option>
-            <option v-for="p in products" :key="p.id" :value="p.id">
-              {{ p.name }} — Stock actual: {{ p.stock }}
+            <option v-for="p in adjustableProducts" :key="p.id" :value="p.id">
+              {{ p.name }} — Stock actual: {{ stockLabel(p) }}
             </option>
           </select>
         </div>
@@ -383,7 +404,8 @@ onMounted(load)
             <input
               v-model.number="form.quantity"
               type="number"
-              min="1"
+              min="0.001"
+              step="0.001"
               class="w-full mt-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm"
             />
           </div>

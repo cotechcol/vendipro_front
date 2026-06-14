@@ -29,15 +29,34 @@ export interface Category {
   active: boolean
 }
 
+export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite'
+export type StockUnit = 'unit' | 'g' | 'ml'
+
+export interface ProductRecipe {
+  id?: number
+  ingredientProductId: number
+  quantity: number
+  unit: StockUnit
+  ingredient?: Product
+}
+
 export interface Product {
   id: number
   sku: string
   name: string
   description?: string
+  productType: ProductType
+  stockUnit: StockUnit
+  baseProductId?: number | null
+  baseProduct?: Product | null
+  portionSize?: number | null
+  recipe?: ProductRecipe[]
   salePrice: number
   costPrice: number
   stock: number
   minStock: number
+  sellableUnits?: number
+  lowStock?: boolean
   categoryId?: number
   category?: Category
   active: boolean

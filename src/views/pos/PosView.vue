@@ -139,7 +139,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
             <div class="flex justify-between items-end mt-2">
               <span class="text-primary-600 font-bold">{{ formatMoney(Number(p.salePrice)) }}</span>
-              <span class="text-xs text-slate-400">{{ p.stock }} uds</span>
+              <span class="text-xs text-slate-400">{{ p.sellableUnits ?? p.stock }} disp.</span>
             </div>
           </button>
           <div v-if="!loading && filtered.length === 0" class="col-span-full text-center text-slate-400 py-12">

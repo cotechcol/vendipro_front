@@ -61,7 +61,23 @@ export function formatDateShort(date: string | Date): string {
   })
 }
 
-/** Fecha actual en Colombia (YYYY-MM-DD) */
+/** Formatea stock según unidad (g, ml, uds) */
+export function formatStock(stock: number | string, unit: string = 'unit'): string {
+  const n = toNumber(stock)
+  if (unit === 'g') return `${formatNumber(n, n % 1 ? 1 : 0)} g`
+  if (unit === 'ml') return `${formatNumber(n, n % 1 ? 1 : 0)} ml`
+  return `${formatNumber(n, 0)} uds`
+}
+
+export function productTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    simple: 'Unidad',
+    bulk: 'Insumo base',
+    portion: 'Porción de venta',
+    composite: 'Compuesto (receta)',
+  }
+  return labels[type] ?? type
+}
 export function todayColombia(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: COLOMBIA_TZ }).format(new Date())
 }

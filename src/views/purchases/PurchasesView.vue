@@ -40,6 +40,9 @@ const totalPurchases = computed(() => purchases.value.length)
 const totalSpent = computed(() =>
   purchases.value.reduce((sum, p) => sum + toNumber(p.total), 0),
 )
+const purchasableProducts = computed(() =>
+  products.value.filter((p) => p.productType === 'simple' || p.productType === 'bulk'),
+)
 const formTotal = computed(() =>
   form.value.items.reduce((sum, item) => sum + item.quantity * item.unitCost, 0),
 )
@@ -98,7 +101,7 @@ async function save() {
     toast.value = { show: true, message: 'Selecciona un proveedor', type: 'error' }
     return
   }
-  if (form.value.items.some((i) => !i.productId || i.quantity < 1)) {
+  if (form.value.items.some((i) => !i.productId || i.quantity <= 0)) {
     toast.value = { show: true, message: 'Completa todos los productos', type: 'error' }
     return
   }
@@ -227,14 +230,14 @@ onMounted(load)
                   @change="onProductChange(idx)"
                 >
                   <option :value="0" disabled>Seleccionar...</option>
-                  <option v-for="p in products" :key="p.id" :value="p.id">
-                    {{ p.name }} ({{ p.sku }})
+                  <option v-for="p in purchasableProducts" :key="p.id" :value="p.id">
+                    {{ p.name }} ({{ p.sku }}){{ p.productType === 'bulk' ? ` — ${p.stockUnit}` : '' }}
                   </option>
                 </select>
               </div>
               <div class="col-span-4 sm:col-span-2">
                 <label class="text-xs text-slate-500">Cantidad</label>
-                <input v-model.number="item.quantity" type="number" min="1" class="input mt-1 !py-2 text-sm" />
+                <input v-model.number="item.quantity" type="number" min="0.001" step="0.001" class="input mt-1 !py-2 text-sm" />
               </div>
               <div class="col-span-5 sm:col-span-3">
                 <label class="text-xs text-slate-500">Costo unit.</label>

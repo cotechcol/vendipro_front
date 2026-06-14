@@ -16,10 +16,15 @@ export const useCartStore = defineStore('cart', () => {
     items.value.reduce((sum, i) => sum + i.quantity, 0),
   )
 
+  function maxQty(product: Product): number {
+    return product.sellableUnits ?? Math.floor(Number(product.stock))
+  }
+
   function addProduct(product: Product) {
+    const max = maxQty(product)
     const existing = items.value.find((i) => i.product.id === product.id)
     if (existing) {
-      if (existing.quantity < product.stock) existing.quantity++
+      if (existing.quantity < max) existing.quantity++
     } else {
       items.value.push({ product, quantity: 1 })
     }
@@ -31,7 +36,7 @@ export const useCartStore = defineStore('cart', () => {
     if (!item) return
     if (quantity <= 0) {
       removeItem(productId)
-    } else if (quantity <= item.product.stock) {
+    } else if (quantity <= maxQty(item.product)) {
       item.quantity = quantity
     }
     amountPaid.value = total.value
