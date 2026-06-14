@@ -2,6 +2,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { CartItem, Product } from '@/types'
 
+function buildCartKey(productId: number, selectedOptionIds?: number[]): string {
+  const opts = (selectedOptionIds ?? []).slice().sort((a, b) => a - b).join(',')
+  return opts ? `${productId}:${opts}` : String(productId)
+}
+
 export const useCartStore = defineStore('cart', () => {
   const items = ref<CartItem[]>([])
   const customerId = ref<number | null>(null)
@@ -20,30 +25,37 @@ export const useCartStore = defineStore('cart', () => {
     return product.sellableUnits ?? Math.floor(Number(product.stock))
   }
 
-  function addProduct(product: Product) {
+  function addProduct(product: Product, selectedOptionIds?: number[], optionLabel?: string) {
+    const cartKey = buildCartKey(product.id, selectedOptionIds)
     const max = maxQty(product)
-    const existing = items.value.find((i) => i.product.id === product.id)
+    const existing = items.value.find((i) => i.cartKey === cartKey)
     if (existing) {
       if (existing.quantity < max) existing.quantity++
     } else {
-      items.value.push({ product, quantity: 1 })
+      items.value.push({
+        product,
+        quantity: 1,
+        selectedOptionIds,
+        optionLabel,
+        cartKey,
+      })
     }
     amountPaid.value = total.value
   }
 
-  function updateQuantity(productId: number, quantity: number) {
-    const item = items.value.find((i) => i.product.id === productId)
+  function updateQuantity(cartKey: string, quantity: number) {
+    const item = items.value.find((i) => i.cartKey === cartKey)
     if (!item) return
     if (quantity <= 0) {
-      removeItem(productId)
+      removeItem(cartKey)
     } else if (quantity <= maxQty(item.product)) {
       item.quantity = quantity
     }
     amountPaid.value = total.value
   }
 
-  function removeItem(productId: number) {
-    items.value = items.value.filter((i) => i.product.id !== productId)
+  function removeItem(cartKey: string) {
+    items.value = items.value.filter((i) => i.cartKey !== cartKey)
     amountPaid.value = total.value
   }
 

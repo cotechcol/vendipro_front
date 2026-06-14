@@ -27,6 +27,13 @@ const form = ref({
   stockUnit: 'unit' as StockUnit,
   baseProductId: undefined as number | undefined,
   portionSize: 90,
+  scoopCount: 1,
+  useOptions: false,
+  flavorOptions: [{ name: '', ingredientProductId: 0 }],
+  containerOptions: [
+    { name: 'Galleta', ingredientProductId: 0 },
+    { name: 'Vaso', ingredientProductId: 0 },
+  ],
   salePrice: 0,
   costPrice: 0,
   stock: 0,
@@ -34,6 +41,10 @@ const form = ref({
   categoryId: undefined as number | undefined,
   recipe: [] as ProductRecipe[],
 })
+
+const simpleProducts = computed(() =>
+  products.value.filter((p) => p.productType === 'simple'),
+)
 
 const filtered = computed(() => {
   let list = products.value
@@ -86,6 +97,12 @@ function resetForm() {
     sku: '', name: '', description: '',
     productType: 'simple', stockUnit: 'unit',
     baseProductId: undefined, portionSize: 90,
+    scoopCount: 1, useOptions: false,
+    flavorOptions: [{ name: '', ingredientProductId: 0 }],
+    containerOptions: [
+      { name: 'Galleta', ingredientProductId: 0 },
+      { name: 'Vaso', ingredientProductId: 0 },
+    ],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
     categoryId: undefined, recipe: [],
   }
@@ -99,6 +116,10 @@ function openCreate() {
 
 function openEdit(p: Product) {
   editing.value = p
+  const flavorGroup = p.optionGroups?.find((g) => g.kind === 'flavor')
+  const containerGroup = p.optionGroups?.find((g) => g.kind === 'container')
+  const hasOptions = !!p.optionGroups?.length
+
   form.value = {
     sku: p.sku,
     name: p.name,
@@ -107,6 +128,19 @@ function openEdit(p: Product) {
     stockUnit: p.stockUnit,
     baseProductId: p.baseProductId ?? undefined,
     portionSize: Number(p.portionSize) || 90,
+    scoopCount: Number(p.scoopCount) || 1,
+    useOptions: hasOptions,
+    flavorOptions: flavorGroup?.options.map((o) => ({
+      name: o.name,
+      ingredientProductId: o.ingredientProductId,
+    })) ?? [{ name: '', ingredientProductId: 0 }],
+    containerOptions: containerGroup?.options.map((o) => ({
+      name: o.name,
+      ingredientProductId: o.ingredientProductId,
+    })) ?? [
+      { name: 'Galleta', ingredientProductId: 0 },
+      { name: 'Vaso', ingredientProductId: 0 },
+    ],
     salePrice: Number(p.salePrice),
     costPrice: Number(p.costPrice),
     stock: Number(p.stock),
@@ -119,6 +153,14 @@ function openEdit(p: Product) {
     })),
   }
   showModal.value = true
+}
+
+function addFlavorOption() {
+  form.value.flavorOptions.push({ name: '', ingredientProductId: 0 })
+}
+
+function removeFlavorOption(idx: number) {
+  if (form.value.flavorOptions.length > 1) form.value.flavorOptions.splice(idx, 1)
 }
 
 function addRecipeLine() {
@@ -134,7 +176,10 @@ watch(() => form.value.productType, (type) => {
     form.value.stockUnit = 'g'
     form.value.salePrice = 0
   }
-  if (type === 'portion' && !form.value.portionSize) form.value.portionSize = 90
+  if (type === 'portion') {
+    if (!form.value.portionSize) form.value.portionSize = 90
+    if (!editing.value) form.value.useOptions = true
+  }
   if (type === 'composite' && form.value.recipe.length === 0) addRecipeLine()
 })
 
@@ -149,6 +194,32 @@ async function save() {
     } else if (form.value.productType === 'portion') {
       delete payload.recipe
       payload.stock = 0
+      if (form.value.useOptions) {
+        delete payload.baseProductId
+        payload.scoopCount = form.value.scoopCount
+        payload.optionGroups = [
+          {
+            name: 'Sabor',
+            kind: 'flavor',
+            options: form.value.flavorOptions
+              .filter((o) => o.name && o.ingredientProductId)
+              .map((o) => ({ name: o.name, ingredientProductId: o.ingredientProductId })),
+          },
+          {
+            name: 'Envase',
+            kind: 'container',
+            options: form.value.containerOptions
+              .filter((o) => o.name && o.ingredientProductId)
+              .map((o) => ({ name: o.name, ingredientProductId: o.ingredientProductId })),
+          },
+        ]
+      } else {
+        delete payload.scoopCount
+        delete payload.optionGroups
+      }
+      delete payload.useOptions
+      delete payload.flavorOptions
+      delete payload.containerOptions
     } else if (form.value.productType === 'composite') {
       delete payload.baseProductId
       delete payload.portionSize
@@ -286,20 +357,80 @@ onMounted(load)
         <!-- Porción -->
         <template v-if="form.productType === 'portion'">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-xl">
-            <div>
-              <label class="text-sm font-medium">Insumo base</label>
-              <select v-model="form.baseProductId" class="w-full mt-1 px-3 py-2 border rounded-lg">
-                <option :value="undefined">Seleccionar insumo…</option>
-                <option v-for="b in bulkProducts" :key="b.id" :value="b.id">
-                  {{ b.name }} ({{ formatStock(b.stock, b.stockUnit) }})
-                </option>
-              </select>
+            <div class="sm:col-span-2">
+              <label class="flex items-center gap-2 text-sm font-medium">
+                <input v-model="form.useOptions" type="checkbox" class="rounded" />
+                Con sabores y envase (elige al vender en POS)
+              </label>
             </div>
-            <div>
-              <label class="text-sm font-medium">Gramos/ml por venta</label>
-              <input v-model.number="form.portionSize" type="number" step="0.001" min="0.001" class="w-full mt-1 px-3 py-2 border rounded-lg" />
-              <p class="text-xs text-slate-500 mt-1">Ej: 90 g por bola de helado</p>
-            </div>
+
+            <template v-if="form.useOptions">
+              <div>
+                <label class="text-sm font-medium">Cantidad de bolas</label>
+                <select v-model.number="form.scoopCount" class="w-full mt-1 px-3 py-2 border rounded-lg">
+                  <option :value="1">1 bola</option>
+                  <option :value="2">2 bolas</option>
+                  <option :value="3">3 bolas</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm font-medium">Gramos por bola</label>
+                <input v-model.number="form.portionSize" type="number" step="0.001" min="0.001" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              </div>
+
+              <div class="sm:col-span-2 space-y-2">
+                <div class="flex justify-between items-center">
+                  <label class="text-sm font-medium">Sabores disponibles</label>
+                  <button type="button" class="text-sm text-brand-600 hover:underline" @click="addFlavorOption">+ Sabor</button>
+                </div>
+                <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
+                  <div class="col-span-5">
+                    <input v-model="flavor.name" placeholder="Nombre (Fresa…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                  <div class="col-span-6">
+                    <select v-model="flavor.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
+                      <option :value="0">Insumo bulk…</option>
+                      <option v-for="b in bulkProducts" :key="b.id" :value="b.id">{{ b.name }}</option>
+                    </select>
+                  </div>
+                  <div class="col-span-1">
+                    <button type="button" class="text-red-500 text-sm" @click="removeFlavorOption(idx)">✕</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sm:col-span-2 space-y-2">
+                <label class="text-sm font-medium">Envases (no cambian el precio)</label>
+                <div v-for="(container, idx) in form.containerOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
+                  <div class="col-span-5">
+                    <input v-model="container.name" class="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                  <div class="col-span-7">
+                    <select v-model="container.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
+                      <option :value="0">Producto en unidades…</option>
+                      <option v-for="s in simpleProducts" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
+              <div>
+                <label class="text-sm font-medium">Insumo base</label>
+                <select v-model="form.baseProductId" class="w-full mt-1 px-3 py-2 border rounded-lg">
+                  <option :value="undefined">Seleccionar insumo…</option>
+                  <option v-for="b in bulkProducts" :key="b.id" :value="b.id">
+                    {{ b.name }} ({{ formatStock(b.stock, b.stockUnit) }})
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm font-medium">Gramos/ml por venta</label>
+                <input v-model.number="form.portionSize" type="number" step="0.001" min="0.001" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              </div>
+            </template>
+
             <div>
               <label class="text-sm font-medium">Precio venta</label>
               <input v-model.number="form.salePrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />

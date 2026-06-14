@@ -7,6 +7,7 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import TicketPrint from '@/components/TicketPrint.vue'
 import CartPanel from '@/components/CartPanel.vue'
+import ProductOptionsModal from '@/components/ProductOptionsModal.vue'
 import type { Product, Category, Customer, Sale, Setting } from '@/types'
 
 import { formatMoney } from '@/utils/format'
@@ -27,6 +28,8 @@ const lastSale = ref<Sale | null>(null)
 const ticketSettings = ref<Setting | null>(null)
 const ticketRef = ref<InstanceType<typeof TicketPrint> | null>(null)
 const toast = ref({ show: false, message: '', type: 'error' as 'success' | 'error' })
+const optionsProduct = ref<Product | null>(null)
+const showOptions = ref(false)
 
 const filtered = computed(() => {
   let list = products.value
@@ -63,7 +66,11 @@ async function checkout() {
   processing.value = true
   try {
     const { data } = await api.post('/sales', {
-      items: cart.items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
+      items: cart.items.map((i) => ({
+        productId: i.product.id,
+        quantity: i.quantity,
+        selectedOptionIds: i.selectedOptionIds,
+      })),
       customerId: cart.customerId || undefined,
       paymentMethod: cart.paymentMethod,
       amountPaid: cart.paymentMethod === 'card' ? undefined : cart.amountPaid,
@@ -85,6 +92,29 @@ async function checkout() {
 function printTicket() {
   const el = ticketRef.value?.$el as HTMLElement | undefined
   if (el) printHtmlElement(el)
+}
+
+function handleProductClick(p: Product) {
+  if (processing.value) return
+  if (p.optionGroups?.length) {
+    optionsProduct.value = p
+    showOptions.value = true
+    return
+  }
+  cart.addProduct(p)
+}
+
+function onOptionsConfirm(selectedOptionIds: number[], label: string) {
+  if (optionsProduct.value) {
+    cart.addProduct(optionsProduct.value, selectedOptionIds, label)
+  }
+  showOptions.value = false
+  optionsProduct.value = null
+}
+
+function closeOptions() {
+  showOptions.value = false
+  optionsProduct.value = null
 }
 
 function closeSuccess() {
@@ -135,7 +165,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             :key="p.id"
             :disabled="processing"
             class="bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-primary-500 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-            @click="cart.addProduct(p)"
+            @click="handleProductClick(p)"
           >
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
@@ -195,6 +225,13 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
         <button class="btn-primary" @click="printTicket">🖨 Imprimir recibo</button>
       </template>
     </AppModal>
+
+    <ProductOptionsModal
+      :show="showOptions"
+      :product="optionsProduct"
+      @close="closeOptions"
+      @confirm="onOptionsConfirm"
+    />
 
     <Toast v-if="toast.show" :message="toast.message" :type="toast.type" @close="toast.show = false" />
   </div>

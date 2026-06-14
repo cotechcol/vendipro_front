@@ -31,6 +31,7 @@ export interface Category {
 
 export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite'
 export type StockUnit = 'unit' | 'g' | 'ml'
+export type OptionGroupKind = 'flavor' | 'container'
 
 export interface ProductRecipe {
   id?: number
@@ -38,6 +39,24 @@ export interface ProductRecipe {
   quantity: number
   unit: StockUnit
   ingredient?: Product
+}
+
+export interface ProductOption {
+  id: number
+  name: string
+  ingredientProductId: number
+  quantity: number
+  unit: StockUnit
+  ingredient?: Product
+}
+
+export interface ProductOptionGroup {
+  id: number
+  name: string
+  kind: OptionGroupKind
+  minSelect: number
+  maxSelect: number
+  options: ProductOption[]
 }
 
 export interface Product {
@@ -50,6 +69,8 @@ export interface Product {
   baseProductId?: number | null
   baseProduct?: Product | null
   portionSize?: number | null
+  scoopCount?: number | null
+  optionGroups?: ProductOptionGroup[]
   recipe?: ProductRecipe[]
   salePrice: number
   costPrice: number
@@ -143,6 +164,9 @@ export interface Sale {
 export interface CartItem {
   product: Product
   quantity: number
+  selectedOptionIds?: number[]
+  optionLabel?: string
+  cartKey: string
 }
 
 export interface DashboardData {
