@@ -23,11 +23,11 @@ const cart = useCartStore()
           <p class="text-xs text-slate-500">{{ formatMoney(Number(item.product.salePrice)) }}</p>
         </div>
         <div class="flex items-center gap-1">
-          <button class="w-7 h-7 bg-white border rounded text-sm" @click="cart.updateQuantity(item.product.id, item.quantity - 1)">-</button>
+          <button :disabled="processing" class="w-7 h-7 bg-white border rounded text-sm disabled:opacity-50" @click="cart.updateQuantity(item.product.id, item.quantity - 1)">-</button>
           <span class="w-8 text-center text-sm font-medium">{{ item.quantity }}</span>
-          <button class="w-7 h-7 bg-white border rounded text-sm" @click="cart.updateQuantity(item.product.id, item.quantity + 1)">+</button>
+          <button :disabled="processing" class="w-7 h-7 bg-white border rounded text-sm disabled:opacity-50" @click="cart.updateQuantity(item.product.id, item.quantity + 1)">+</button>
         </div>
-        <button class="text-red-400 text-sm ml-1" @click="cart.removeItem(item.product.id)">&times;</button>
+        <button :disabled="processing" class="text-red-400 text-sm ml-1 disabled:opacity-50" @click="cart.removeItem(item.product.id)">&times;</button>
       </div>
     </div>
     <div class="space-y-3 border-t pt-3">
@@ -53,12 +53,12 @@ const cart = useCartStore()
       </div>
       <button
         :disabled="cart.items.length === 0 || processing"
-        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl text-lg disabled:opacity-50 transition-colors"
+        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl text-lg disabled:opacity-50 disabled:pointer-events-none transition-colors"
         @click="$emit('checkout')"
       >
-        {{ processing ? 'Procesando...' : 'Cobrar' }}
+        {{ processing ? 'Procesando venta...' : 'Cobrar' }}
       </button>
-      <button class="w-full text-sm text-slate-500 py-1" @click="cart.clear()">Limpiar carrito (Esc)</button>
+      <button :disabled="processing" class="w-full text-sm text-slate-500 py-1 disabled:opacity-50" @click="cart.clear()">Limpiar carrito (Esc)</button>
     </div>
   </div>
 </template>

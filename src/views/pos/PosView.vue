@@ -55,7 +55,7 @@ async function loadProducts() {
 }
 
 async function checkout() {
-  if (cart.items.length === 0) return
+  if (processing.value || cart.items.length === 0) return
   if (!app.cashSession) {
     toast.value = { show: true, message: 'Debes abrir la caja primero', type: 'error' }
     return
@@ -92,6 +92,7 @@ function closeSuccess() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (processing.value) return
   if (e.key === 'Escape') cart.clear()
   if (e.key === 'Enter' && e.ctrlKey) checkout()
 }
@@ -132,7 +133,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
           <button
             v-for="p in filtered"
             :key="p.id"
-            class="bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-primary-500 hover:shadow-md transition-all active:scale-95"
+            :disabled="processing"
+            class="bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-primary-500 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
             @click="cart.addProduct(p)"
           >
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
