@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useStoreStore } from '@/stores/store'
@@ -10,6 +10,7 @@ const auth = useAuthStore()
 const app = useAppStore()
 const storeStore = useStoreStore()
 const route = useRoute()
+const router = useRouter()
 const sidebarOpen = ref(false)
 
 const navItems = [
@@ -71,6 +72,12 @@ function onStoreChange(e: Event) {
   const val = (e.target as HTMLSelectElement).value
   storeStore.setActiveStore(val ? Number(val) : null)
   loadStoreData()
+}
+
+function handleLogout() {
+  sidebarOpen.value = false
+  auth.logout()
+  router.push('/login')
 }
 
 onMounted(async () => {
@@ -145,7 +152,7 @@ watch(() => storeStore.activeStoreId, loadStoreData)
         </div>
         <button
           class="w-full text-sm text-slate-500 hover:text-white transition-colors py-2 px-2 rounded-lg hover:bg-white/5"
-          @click="auth.logout(); $router.push('/login')"
+          @click="handleLogout"
         >
           Cerrar sesión
         </button>
@@ -155,22 +162,63 @@ watch(() => storeStore.activeStoreId, loadStoreData)
     <Teleport to="body">
       <div v-if="sidebarOpen" class="fixed inset-0 z-50 lg:hidden">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="sidebarOpen = false" />
-        <aside class="relative w-[280px] h-full bg-sidebar text-white shadow-2xl">
-          <div class="p-5 border-b border-white/10 flex justify-between items-center">
-            <span class="font-bold text-lg">{{ APP_NAME }}</span>
-            <button class="text-slate-400 hover:text-white text-xl" @click="sidebarOpen = false">&times;</button>
+        <aside class="relative flex flex-col w-[280px] max-w-[85vw] h-full bg-sidebar text-white shadow-2xl">
+          <div class="p-5 border-b border-white/10 flex justify-between items-center shrink-0">
+            <div>
+              <span class="font-bold text-lg">{{ APP_NAME }}</span>
+              <p v-if="activeStoreLabel" class="text-xs text-emerald-400 mt-1 truncate">{{ activeStoreLabel }}</p>
+            </div>
+            <button class="text-slate-400 hover:text-white text-2xl leading-none p-1" @click="sidebarOpen = false">&times;</button>
           </div>
-          <nav class="p-3 space-y-0.5">
+
+          <div v-if="auth.isSuperAdmin" class="px-4 py-3 border-b border-white/10 shrink-0">
+            <label class="text-[10px] text-slate-500 uppercase tracking-wide">Tienda activa</label>
+            <select
+              class="w-full mt-1 bg-white/10 border border-white/20 rounded-lg text-xs text-white px-2 py-2"
+              :value="storeStore.activeStoreId ?? ''"
+              @change="onStoreChange"
+            >
+              <option value="">— Todas (consolidado) —</option>
+              <option v-for="s in storeStore.stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+          </div>
+
+          <nav class="flex-1 min-h-0 p-3 space-y-0.5 overflow-y-auto">
             <RouterLink
               v-for="item in filteredNav"
               :key="item.to"
               :to="item.to"
-              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:text-white hover:bg-white/5"
+              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all"
+              :class="isActive(item.to)
+                ? 'bg-emerald-600 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'"
               @click="sidebarOpen = false"
             >
               <span class="w-5 text-center text-xs">{{ item.icon }}</span>{{ item.label }}
             </RouterLink>
           </nav>
+
+          <div class="shrink-0 p-4 border-t border-white/10">
+            <div class="flex items-center gap-3 mb-3 px-2">
+              <div class="w-8 h-8 rounded-full bg-emerald-600/30 flex items-center justify-center text-xs font-bold text-emerald-300">
+                {{ auth.user?.name?.charAt(0) }}
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-medium truncate">{{ auth.user?.name }}</p>
+                <p class="text-xs text-slate-500">{{ roleLabel }}</p>
+              </div>
+            </div>
+            <div v-if="app.cashSession" class="flex items-center gap-2 text-xs text-emerald-400 mb-3 px-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Caja abierta
+            </div>
+            <button
+              class="w-full text-sm text-red-300 hover:text-white transition-colors py-2.5 px-2 rounded-lg hover:bg-red-500/20 border border-red-500/30"
+              @click="handleLogout"
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </aside>
       </div>
     </Teleport>
