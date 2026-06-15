@@ -94,11 +94,12 @@ export interface Customer {
 
 export interface Supplier {
   id: number
-  name: string
-  email?: string
-  phone?: string
-  address?: string
-  contact?: string
+  name?: string | null
+  nit?: string | null
+  email?: string | null
+  phone?: string | null
+  address?: string | null
+  contact?: string | null
   active: boolean
 }
 

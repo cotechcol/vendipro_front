@@ -10,7 +10,16 @@ const loading = ref(true)
 const showModal = ref(false)
 const editing = ref<Supplier | null>(null)
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
-const form = ref({ name: '', email: '', phone: '', address: '', contact: '' })
+const form = ref({ name: '', nit: '', email: '', phone: '', address: '', contact: '' })
+
+function emptyPayload(data: typeof form.value) {
+  const payload: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(data)) {
+    const trimmed = value.trim()
+    if (trimmed) payload[key] = trimmed
+  }
+  return payload
+}
 
 async function load() {
   loading.value = true
@@ -24,20 +33,28 @@ async function load() {
 
 function openCreate() {
   editing.value = null
-  form.value = { name: '', email: '', phone: '', address: '', contact: '' }
+  form.value = { name: '', nit: '', email: '', phone: '', address: '', contact: '' }
   showModal.value = true
 }
 
 function openEdit(s: Supplier) {
   editing.value = s
-  form.value = { name: s.name, email: s.email || '', phone: s.phone || '', address: s.address || '', contact: s.contact || '' }
+  form.value = {
+    name: s.name || '',
+    nit: s.nit || '',
+    email: s.email || '',
+    phone: s.phone || '',
+    address: s.address || '',
+    contact: s.contact || '',
+  }
   showModal.value = true
 }
 
 async function save() {
   try {
-    if (editing.value) await api.patch(`/suppliers/${editing.value.id}`, form.value)
-    else await api.post('/suppliers', form.value)
+    const payload = emptyPayload(form.value)
+    if (editing.value) await api.patch(`/suppliers/${editing.value.id}`, payload)
+    else await api.post('/suppliers', payload)
     showModal.value = false
     toast.value = { show: true, message: 'Proveedor guardado', type: 'success' }
     await load()
@@ -65,15 +82,17 @@ onMounted(load)
       <table class="w-full text-sm">
         <thead class="bg-slate-50"><tr>
           <th class="text-left px-4 py-3">Nombre</th>
+          <th class="text-left px-4 py-3">NIT</th>
           <th class="text-left px-4 py-3">Contacto</th>
           <th class="text-left px-4 py-3">Teléfono</th>
           <th class="text-right px-4 py-3">Acciones</th>
         </tr></thead>
         <tbody>
           <tr v-for="s in suppliers" :key="s.id" class="border-t hover:bg-slate-50">
-            <td class="px-4 py-3 font-medium">{{ s.name }}</td>
-            <td class="px-4 py-3">{{ s.contact || '-' }}</td>
-            <td class="px-4 py-3">{{ s.phone || '-' }}</td>
+            <td class="px-4 py-3 font-medium">{{ s.name || '—' }}</td>
+            <td class="px-4 py-3 font-mono text-xs">{{ s.nit || '—' }}</td>
+            <td class="px-4 py-3">{{ s.contact || '—' }}</td>
+            <td class="px-4 py-3">{{ s.phone || '—' }}</td>
             <td class="px-4 py-3 text-right space-x-2">
               <button class="text-primary-600 hover:underline" @click="openEdit(s)">Editar</button>
               <button class="text-red-500 hover:underline" @click="remove(s.id)">Eliminar</button>
@@ -83,12 +102,32 @@ onMounted(load)
       </table>
     </div>
     <AppModal :show="showModal" :title="editing ? 'Editar proveedor' : 'Nuevo proveedor'" @close="showModal = false">
+      <p class="text-xs text-slate-500 mb-4">Todos los campos son opcionales.</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div><label class="text-sm font-medium">Nombre</label><input v-model="form.name" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
-        <div><label class="text-sm font-medium">Contacto</label><input v-model="form.contact" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
-        <div><label class="text-sm font-medium">Teléfono</label><input v-model="form.phone" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
-        <div><label class="text-sm font-medium">Email</label><input v-model="form.email" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
-        <div class="sm:col-span-2"><label class="text-sm font-medium">Dirección</label><input v-model="form.address" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
+        <div>
+          <label class="text-sm font-medium">Nombre <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input v-model="form.name" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">NIT <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input v-model="form.nit" placeholder="Ej: 900123456-1" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Contacto <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input v-model="form.contact" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Teléfono <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input v-model="form.phone" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Email <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input v-model="form.email" type="email" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="text-sm font-medium">Dirección <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input v-model="form.address" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+        </div>
       </div>
       <template #footer>
         <button class="px-4 py-2" @click="showModal = false">Cancelar</button>
