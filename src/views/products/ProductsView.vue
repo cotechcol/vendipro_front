@@ -440,7 +440,9 @@ onMounted(load)
                   <div class="col-span-6">
                     <select v-model="flavor.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
                       <option :value="0">Insumo bulk…</option>
-                      <option v-for="b in bulkProducts" :key="b.id" :value="b.id">{{ b.name }}</option>
+                      <option v-for="b in bulkProducts" :key="b.id" :value="b.id">
+                        {{ b.name }} ({{ formatStock(b.stock, b.stockUnit) }})
+                      </option>
                     </select>
                   </div>
                   <div class="col-span-1">
@@ -458,7 +460,9 @@ onMounted(load)
                   <div class="col-span-7">
                     <select v-model="container.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
                       <option :value="0">Producto en unidades…</option>
-                      <option v-for="s in simpleProducts" :key="s.id" :value="s.id">{{ s.name }}</option>
+                      <option v-for="s in simpleProducts" :key="s.id" :value="s.id">
+                        {{ s.name }} ({{ formatStock(s.stock, s.stockUnit) }})
+                      </option>
                     </select>
                   </div>
                 </div>

@@ -114,7 +114,8 @@ async function handleProductClick(p: Product) {
   }
 
   let product = p
-  if (!p.optionGroups?.length && p.scoopCount) {
+  const needsOptions = product.optionGroups?.length || p.scoopCount
+  if (needsOptions) {
     try {
       const { data } = await api.get<Product>(`/products/${p.id}`)
       product = data
