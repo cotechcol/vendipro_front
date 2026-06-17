@@ -75,6 +75,10 @@ const unitLabels: Record<string, string> = {
   unit: 'Unidades',
 }
 
+export function stockUnitLabel(unit: string = 'unit'): string {
+  return unitLabels[unit] ?? unit
+}
+
 export function parseDecimalInput(raw: string): number {
   const s = raw.trim().replace(/\s/g, '').replace(',', '.')
   const n = parseFloat(s)
