@@ -55,6 +55,10 @@ const productTypeOptions: { value: ProductType; label: string }[] = [
   { value: 'composite', label: 'Compuesto (receta)' },
 ]
 
+const portionSizeLabel = computed(() =>
+  form.value.stockUnit === 'ml' ? 'Mililitros por bola' : 'Gramos por bola',
+)
+
 const filtered = computed(() => {
   let list = products.value
   if (search.value) {
@@ -196,7 +200,9 @@ function openEdit(p: Product) {
     name: p.name,
     description: p.description || '',
     productType: p.productType,
-    stockUnit: p.stockUnit,
+    stockUnit: p.productType === 'portion' && p.stockUnit !== 'g' && p.stockUnit !== 'ml'
+      ? 'g'
+      : p.stockUnit,
     baseProductId: p.baseProductId ?? undefined,
     portionSize: Number(p.portionSize) || 90,
     scoopCount: Number(p.scoopCount) || 1,
@@ -262,13 +268,16 @@ watch(() => form.value.productType, (type) => {
     form.value.visibleInPos = true
   }
   if (type === 'portion') {
+    if (form.value.stockUnit !== 'g' && form.value.stockUnit !== 'ml') {
+      form.value.stockUnit = 'g'
+    }
     if (!form.value.portionSize) form.value.portionSize = 90
     if (!editing.value) form.value.useOptions = true
   }
   if (type === 'composite' && form.value.recipe.length === 0) addRecipeLine()
 })
 
-watch(() => form.value.portionSize, () => {
+watch(() => [form.value.portionSize, form.value.stockUnit] as const, () => {
   if (!form.value.useOptions) return
   form.value.flavorOptions.forEach((row, idx) => {
     if (row.ingredientProductId) onFlavorIngredientChange(idx)
@@ -297,6 +306,9 @@ async function save() {
     } else if (form.value.productType === 'portion') {
       delete payload.recipe
       payload.stock = 0
+      if (form.value.stockUnit !== 'g' && form.value.stockUnit !== 'ml') {
+        payload.stockUnit = 'g'
+      }
       if (form.value.useOptions) {
         delete payload.baseProductId
         payload.scoopCount = form.value.scoopCount
@@ -520,8 +532,20 @@ onMounted(load)
                 </select>
               </div>
               <div>
-                <label class="text-sm font-medium">Gramos por bola</label>
-                <input v-model.number="form.portionSize" type="number" step="0.001" min="0.001" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+                <label class="text-sm font-medium">{{ portionSizeLabel }}</label>
+                <div class="flex gap-2 mt-1">
+                  <input
+                    v-model.number="form.portionSize"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    class="flex-1 min-w-0 px-3 py-2 border rounded-lg"
+                  />
+                  <select v-model="form.stockUnit" class="w-20 shrink-0 px-2 py-2 border rounded-lg">
+                    <option value="g">g</option>
+                    <option value="ml">ml</option>
+                  </select>
+                </div>
               </div>
 
               <div class="sm:col-span-2 space-y-2">
@@ -631,8 +655,20 @@ onMounted(load)
                 </select>
               </div>
               <div>
-                <label class="text-sm font-medium">Gramos/ml por venta</label>
-                <input v-model.number="form.portionSize" type="number" step="0.001" min="0.001" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+                <label class="text-sm font-medium">{{ portionSizeLabel.replace(' por bola', ' por venta') }}</label>
+                <div class="flex gap-2 mt-1">
+                  <input
+                    v-model.number="form.portionSize"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    class="flex-1 min-w-0 px-3 py-2 border rounded-lg"
+                  />
+                  <select v-model="form.stockUnit" class="w-20 shrink-0 px-2 py-2 border rounded-lg">
+                    <option value="g">g</option>
+                    <option value="ml">ml</option>
+                  </select>
+                </div>
               </div>
             </template>
 
