@@ -15,6 +15,7 @@ const bulkProducts = ref<Product[]>([])
 const loading = ref(true)
 const search = ref('')
 const categoryFilter = ref<number | ''>('')
+const typeFilter = ref<ProductType | ''>('')
 const showModal = ref(false)
 const editing = ref<Product | null>(null)
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
@@ -47,12 +48,20 @@ const simpleProducts = computed(() =>
   products.value.filter((p) => p.productType === 'simple'),
 )
 
+const productTypeOptions: { value: ProductType; label: string }[] = [
+  { value: 'simple', label: 'Unidad' },
+  { value: 'bulk', label: 'Insumo base' },
+  { value: 'portion', label: 'Porción de venta' },
+  { value: 'composite', label: 'Compuesto (receta)' },
+]
+
 const filtered = computed(() => {
   let list = products.value
   if (search.value) {
     const s = search.value.toLowerCase()
     list = list.filter((p) => p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s))
   }
+  if (typeFilter.value) list = list.filter((p) => p.productType === typeFilter.value)
   if (categoryFilter.value) list = list.filter((p) => p.categoryId === categoryFilter.value)
   return list
 })
@@ -288,7 +297,11 @@ onMounted(load)
 
     <div class="flex flex-col sm:flex-row gap-3 mb-4">
       <input v-model="search" placeholder="Buscar por nombre o SKU..." class="flex-1 px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500" />
-      <select v-model="categoryFilter" class="px-4 py-2 border border-slate-300 rounded-lg">
+      <select v-model="typeFilter" class="px-4 py-2 border border-slate-300 rounded-lg sm:min-w-[180px]">
+        <option value="">Todos los tipos</option>
+        <option v-for="opt in productTypeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+      <select v-model="categoryFilter" class="px-4 py-2 border border-slate-300 rounded-lg sm:min-w-[180px]">
         <option value="">Todas las categorías</option>
         <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
       </select>
