@@ -39,6 +39,7 @@ const form = ref({
   stock: 0,
   minStock: 5,
   categoryId: undefined as number | undefined,
+  visibleInPos: true,
   recipe: [] as ProductRecipe[],
 })
 
@@ -104,7 +105,7 @@ function resetForm() {
       { name: 'Vaso', ingredientProductId: 0 },
     ],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
-    categoryId: undefined, recipe: [],
+    categoryId: undefined, visibleInPos: true, recipe: [],
   }
 }
 
@@ -146,6 +147,7 @@ function openEdit(p: Product) {
     stock: Number(p.stock),
     minStock: Number(p.minStock),
     categoryId: p.categoryId,
+    visibleInPos: p.visibleInPos !== false,
     recipe: (p.recipe ?? []).map((r) => ({
       ingredientProductId: r.ingredientProductId,
       quantity: Number(r.quantity),
@@ -175,6 +177,9 @@ watch(() => form.value.productType, (type) => {
   if (type === 'bulk') {
     form.value.stockUnit = 'g'
     form.value.salePrice = 0
+    form.value.visibleInPos = false
+  } else if (!editing.value) {
+    form.value.visibleInPos = true
   }
   if (type === 'portion') {
     if (!form.value.portionSize) form.value.portionSize = 90
@@ -188,6 +193,7 @@ async function save() {
     const payload: Record<string, unknown> = { ...form.value }
     if (form.value.productType === 'bulk') {
       payload.salePrice = 0
+      payload.visibleInPos = false
       delete payload.baseProductId
       delete payload.portionSize
       delete payload.recipe
@@ -253,6 +259,22 @@ async function remove(id: number) {
   await load()
 }
 
+async function toggleVisibleInPos(p: Product) {
+  if (p.productType === 'bulk') return
+  const next = !(p.visibleInPos !== false)
+  try {
+    await api.patch(`/products/${p.id}`, { visibleInPos: next })
+    p.visibleInPos = next
+    toast.value = {
+      show: true,
+      message: next ? 'Visible en punto de venta' : 'Oculto del punto de venta',
+      type: 'success',
+    }
+  } catch {
+    toast.value = { show: true, message: 'No se pudo actualizar', type: 'error' }
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -283,12 +305,13 @@ onMounted(load)
               <th class="text-left px-4 py-3">Categoría</th>
               <th class="text-right px-4 py-3">Precio</th>
               <th class="text-right px-4 py-3">Stock / Disp.</th>
+              <th class="text-center px-4 py-3">POS</th>
               <th v-if="auth.isAdmin" class="text-right px-4 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="loading"><td colspan="7" class="px-4 py-8 text-center text-slate-400">Cargando...</td></tr>
-            <tr v-else-if="filtered.length === 0"><td colspan="7" class="px-4 py-8 text-center text-slate-400">Sin productos</td></tr>
+            <tr v-if="loading"><td colspan="8" class="px-4 py-8 text-center text-slate-400">Cargando...</td></tr>
+            <tr v-else-if="filtered.length === 0"><td colspan="8" class="px-4 py-8 text-center text-slate-400">Sin productos</td></tr>
             <tr v-for="p in filtered" :key="p.id" class="border-t border-slate-100 hover:bg-slate-50">
               <td class="px-4 py-3 font-mono text-xs">{{ p.sku }}</td>
               <td class="px-4 py-3 font-medium">{{ p.name }}</td>
@@ -299,6 +322,20 @@ onMounted(load)
               </td>
               <td class="px-4 py-3 text-right" :class="isLow(p) ? 'text-red-600 font-semibold' : ''">
                 {{ stockDisplay(p) }}
+              </td>
+              <td class="px-4 py-3 text-center">
+                <span v-if="p.productType === 'bulk'" class="text-xs text-slate-400" title="Los insumos no se venden en caja">—</span>
+                <label v-else-if="auth.isAdmin" class="inline-flex items-center justify-center cursor-pointer" :title="p.visibleInPos !== false ? 'Visible en POS' : 'Oculto del POS'">
+                  <input
+                    type="checkbox"
+                    class="rounded text-primary-600"
+                    :checked="p.visibleInPos !== false"
+                    @change="toggleVisibleInPos(p)"
+                  />
+                </label>
+                <span v-else :class="p.visibleInPos !== false ? 'text-emerald-600' : 'text-slate-400'">
+                  {{ p.visibleInPos !== false ? 'Sí' : 'No' }}
+                </span>
               </td>
               <td v-if="auth.isAdmin" class="px-4 py-3 text-right space-x-2">
                 <button class="text-primary-600 hover:underline" @click="openEdit(p)">Editar</button>
@@ -501,6 +538,16 @@ onMounted(load)
             <option :value="undefined">Sin categoría</option>
             <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
+        </div>
+
+        <div v-if="form.productType !== 'bulk'" class="p-4 bg-slate-50 rounded-xl">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input v-model="form.visibleInPos" type="checkbox" class="rounded text-primary-600" />
+            <span class="text-sm font-medium">Mostrar en punto de venta</span>
+          </label>
+          <p class="text-xs text-slate-500 mt-1 ml-6">
+            Si está desactivado, el producto no aparece en caja aunque tenga stock.
+          </p>
         </div>
       </div>
       <template #footer>

@@ -98,8 +98,20 @@ function hasConfigurableOptions(p: Product): boolean {
   return (p.optionGroups?.length ?? 0) > 0 || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
 }
 
+function sellableCount(p: Product): number {
+  return Number(p.sellableUnits ?? p.stock ?? 0)
+}
+
+function isAvailable(p: Product): boolean {
+  return sellableCount(p) > 0
+}
+
 async function handleProductClick(p: Product) {
   if (processing.value) return
+  if (!isAvailable(p)) {
+    toast.value = { show: true, message: 'Sin stock disponible para vender', type: 'error' }
+    return
+  }
 
   let product = p
   if (!p.optionGroups?.length && p.scoopCount) {
@@ -191,22 +203,30 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
           <button
             v-for="p in filtered"
             :key="p.id"
-            :disabled="processing"
-            class="bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-primary-500 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+            :disabled="processing || !isAvailable(p)"
+            :class="[
+              'border rounded-xl p-4 text-left transition-all disabled:pointer-events-none',
+              isAvailable(p)
+                ? 'bg-white border-slate-200 hover:border-primary-500 hover:shadow-md active:scale-95'
+                : 'bg-slate-50 border-slate-100 opacity-60 cursor-not-allowed',
+            ]"
             @click="handleProductClick(p)"
           >
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
-            <p v-if="hasConfigurableOptions(p)" class="text-xs text-primary-600 font-medium mt-1">
+            <p v-if="!isAvailable(p)" class="text-xs text-red-500 font-medium mt-1">Sin stock</p>
+            <p v-else-if="hasConfigurableOptions(p)" class="text-xs text-primary-600 font-medium mt-1">
               Toca para elegir sabor y envase
             </p>
             <div class="flex justify-between items-end mt-2">
               <span class="text-primary-600 font-bold">{{ formatMoney(Number(p.salePrice)) }}</span>
-              <span class="text-xs text-slate-400">{{ p.sellableUnits ?? p.stock }} disp.</span>
+              <span class="text-xs" :class="isAvailable(p) ? 'text-slate-400' : 'text-red-400'">
+                {{ sellableCount(p) }} disp.
+              </span>
             </div>
           </button>
           <div v-if="!loading && filtered.length === 0" class="col-span-full text-center text-slate-400 py-12">
-            No hay productos disponibles
+            No hay productos en el punto de venta. Activa «Mostrar en POS» en Productos.
           </div>
         </div>
       </div>

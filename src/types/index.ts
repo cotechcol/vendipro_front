@@ -81,6 +81,7 @@ export interface Product {
   categoryId?: number
   category?: Category
   active: boolean
+  visibleInPos?: boolean
 }
 
 export interface Customer {
