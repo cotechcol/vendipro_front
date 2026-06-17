@@ -174,6 +174,14 @@ function removeFlavorOption(idx: number) {
   if (form.value.flavorOptions.length > 1) form.value.flavorOptions.splice(idx, 1)
 }
 
+function addContainerOption() {
+  form.value.containerOptions.push({ name: '', ingredientProductId: 0 })
+}
+
+function removeContainerOption(idx: number) {
+  if (form.value.containerOptions.length > 1) form.value.containerOptions.splice(idx, 1)
+}
+
 function addRecipeLine() {
   form.value.recipe.push({ ingredientProductId: 0, quantity: 0, unit: 'g' })
 }
@@ -452,18 +460,24 @@ onMounted(load)
               </div>
 
               <div class="sm:col-span-2 space-y-2">
-                <label class="text-sm font-medium">Envases (no cambian el precio)</label>
+                <div class="flex justify-between items-center">
+                  <label class="text-sm font-medium">Envases (no cambian el precio)</label>
+                  <button type="button" class="text-sm text-brand-600 hover:underline" @click="addContainerOption">+ Envase</button>
+                </div>
                 <div v-for="(container, idx) in form.containerOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
                   <div class="col-span-5">
-                    <input v-model="container.name" class="w-full px-3 py-2 border rounded-lg text-sm" />
+                    <input v-model="container.name" placeholder="Nombre (Cono, vaso…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
                   </div>
-                  <div class="col-span-7">
+                  <div class="col-span-6">
                     <select v-model="container.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
                       <option :value="0">Producto en unidades…</option>
                       <option v-for="s in simpleProducts" :key="s.id" :value="s.id">
                         {{ s.name }} ({{ formatStock(s.stock, s.stockUnit) }})
                       </option>
                     </select>
+                  </div>
+                  <div class="col-span-1">
+                    <button type="button" class="text-red-500 text-sm" @click="removeContainerOption(idx)">✕</button>
                   </div>
                 </div>
               </div>
