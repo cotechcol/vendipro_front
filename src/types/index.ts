@@ -47,6 +47,7 @@ export interface ProductOption {
   ingredientProductId: number
   quantity: number
   unit: StockUnit
+  unitCost?: number
   ingredient?: Product
 }
 

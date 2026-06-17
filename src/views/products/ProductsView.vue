@@ -30,10 +30,10 @@ const form = ref({
   portionSize: 90,
   scoopCount: 1,
   useOptions: false,
-  flavorOptions: [{ name: '', ingredientProductId: 0 }],
+  flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0 }],
   containerOptions: [
-    { name: 'Galleta', ingredientProductId: 0 },
-    { name: 'Vaso', ingredientProductId: 0 },
+    { name: 'Galleta', ingredientProductId: 0, unitCost: 0 },
+    { name: 'Vaso', ingredientProductId: 0, unitCost: 0 },
   ],
   salePrice: 0,
   costPrice: 0,
@@ -69,6 +69,67 @@ const filtered = computed(() => {
 const ingredientOptions = computed(() =>
   products.value.filter((p) => p.productType === 'bulk' || p.productType === 'simple'),
 )
+
+function flavorCostFromBulk(bulkId: number): number {
+  const bulk = bulkProducts.value.find((b) => b.id === bulkId)
+  if (!bulk) return 0
+  return Number((Number(bulk.costPrice) * Number(form.value.portionSize)).toFixed(2))
+}
+
+function containerCostFromProduct(productId: number): number {
+  const p = simpleProducts.value.find((s) => s.id === productId)
+  return p ? Number(p.costPrice) : 0
+}
+
+function onFlavorIngredientChange(idx: number) {
+  const row = form.value.flavorOptions[idx]
+  if (row.ingredientProductId) {
+    row.unitCost = flavorCostFromBulk(row.ingredientProductId)
+  }
+}
+
+function onContainerIngredientChange(idx: number) {
+  const row = form.value.containerOptions[idx]
+  if (row.ingredientProductId) {
+    row.unitCost = containerCostFromProduct(row.ingredientProductId)
+  }
+}
+
+const portionCostBreakdown = computed(() => {
+  if (!form.value.useOptions || form.value.productType !== 'portion') return null
+
+  const flavorCosts = form.value.flavorOptions
+    .map((f) => Number(f.unitCost) || 0)
+    .filter((n) => n > 0)
+  const containerCosts = form.value.containerOptions
+    .map((c) => Number(c.unitCost) || 0)
+    .filter((n) => n > 0)
+
+  if (!flavorCosts.length) return null
+
+  const scoops = form.value.scoopCount
+  const avgFlavor = flavorCosts.reduce((a, b) => a + b, 0) / flavorCosts.length
+  const minFlavor = Math.min(...flavorCosts)
+  const maxFlavor = Math.max(...flavorCosts)
+  const scoopsCost = Number((avgFlavor * scoops).toFixed(2))
+  const minScoops = Number((minFlavor * scoops).toFixed(2))
+  const maxScoops = Number((maxFlavor * scoops).toFixed(2))
+
+  const avgContainer = containerCosts.length
+    ? containerCosts.reduce((a, b) => a + b, 0) / containerCosts.length
+    : 0
+  const minContainer = containerCosts.length ? Math.min(...containerCosts) : 0
+  const maxContainer = containerCosts.length ? Math.max(...containerCosts) : 0
+
+  return {
+    scoops,
+    scoopsCost,
+    avgContainer: Number(avgContainer.toFixed(2)),
+    referenceTotal: Number((scoopsCost + avgContainer).toFixed(2)),
+    minTotal: Number((minScoops + minContainer).toFixed(2)),
+    maxTotal: Number((maxScoops + maxContainer).toFixed(2)),
+  }
+})
 
 function stockDisplay(p: Product): string {
   if (p.productType === 'bulk') return formatStock(p.stock, p.stockUnit)
@@ -108,10 +169,10 @@ function resetForm() {
     productType: 'simple', stockUnit: 'unit',
     baseProductId: undefined, portionSize: 90,
     scoopCount: 1, useOptions: false,
-    flavorOptions: [{ name: '', ingredientProductId: 0 }],
+    flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0 }],
     containerOptions: [
-      { name: 'Galleta', ingredientProductId: 0 },
-      { name: 'Vaso', ingredientProductId: 0 },
+      { name: 'Galleta', ingredientProductId: 0, unitCost: 0 },
+      { name: 'Vaso', ingredientProductId: 0, unitCost: 0 },
     ],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
     categoryId: undefined, visibleInPos: true, recipe: [],
@@ -143,13 +204,15 @@ function openEdit(p: Product) {
     flavorOptions: flavorGroup?.options.map((o) => ({
       name: o.name,
       ingredientProductId: o.ingredientProductId,
-    })) ?? [{ name: '', ingredientProductId: 0 }],
+      unitCost: Number(o.unitCost) || flavorCostFromBulk(o.ingredientProductId),
+    })) ?? [{ name: '', ingredientProductId: 0, unitCost: 0 }],
     containerOptions: containerGroup?.options.map((o) => ({
       name: o.name,
       ingredientProductId: o.ingredientProductId,
+      unitCost: Number(o.unitCost) || containerCostFromProduct(o.ingredientProductId),
     })) ?? [
-      { name: 'Galleta', ingredientProductId: 0 },
-      { name: 'Vaso', ingredientProductId: 0 },
+      { name: 'Galleta', ingredientProductId: 0, unitCost: 0 },
+      { name: 'Vaso', ingredientProductId: 0, unitCost: 0 },
     ],
     salePrice: Number(p.salePrice),
     costPrice: Number(p.costPrice),
@@ -167,7 +230,7 @@ function openEdit(p: Product) {
 }
 
 function addFlavorOption() {
-  form.value.flavorOptions.push({ name: '', ingredientProductId: 0 })
+  form.value.flavorOptions.push({ name: '', ingredientProductId: 0, unitCost: 0 })
 }
 
 function removeFlavorOption(idx: number) {
@@ -175,7 +238,7 @@ function removeFlavorOption(idx: number) {
 }
 
 function addContainerOption() {
-  form.value.containerOptions.push({ name: '', ingredientProductId: 0 })
+  form.value.containerOptions.push({ name: '', ingredientProductId: 0, unitCost: 0 })
 }
 
 function removeContainerOption(idx: number) {
@@ -205,6 +268,23 @@ watch(() => form.value.productType, (type) => {
   if (type === 'composite' && form.value.recipe.length === 0) addRecipeLine()
 })
 
+watch(() => form.value.portionSize, () => {
+  if (!form.value.useOptions) return
+  form.value.flavorOptions.forEach((row, idx) => {
+    if (row.ingredientProductId) onFlavorIngredientChange(idx)
+  })
+})
+
+watch(
+  portionCostBreakdown,
+  (b) => {
+    if (form.value.useOptions && form.value.productType === 'portion' && b) {
+      form.value.costPrice = b.referenceTotal
+    }
+  },
+  { deep: true },
+)
+
 async function save() {
   try {
     const payload: Record<string, unknown> = { ...form.value }
@@ -226,14 +306,22 @@ async function save() {
             kind: 'flavor',
             options: form.value.flavorOptions
               .filter((o) => o.name && o.ingredientProductId)
-              .map((o) => ({ name: o.name, ingredientProductId: o.ingredientProductId })),
+              .map((o) => ({
+                name: o.name,
+                ingredientProductId: o.ingredientProductId,
+                unitCost: Number(o.unitCost) || 0,
+              })),
           },
           {
             name: 'Envase',
             kind: 'container',
             options: form.value.containerOptions
               .filter((o) => o.name && o.ingredientProductId)
-              .map((o) => ({ name: o.name, ingredientProductId: o.ingredientProductId })),
+              .map((o) => ({
+                name: o.name,
+                ingredientProductId: o.ingredientProductId,
+                unitCost: Number(o.unitCost) || 0,
+              })),
           },
         ]
       } else {
@@ -442,16 +530,31 @@ onMounted(load)
                   <button type="button" class="text-sm text-brand-600 hover:underline" @click="addFlavorOption">+ Sabor</button>
                 </div>
                 <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
-                  <div class="col-span-5">
+                  <div class="col-span-4">
                     <input v-model="flavor.name" placeholder="Nombre (Fresa…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
                   </div>
-                  <div class="col-span-6">
-                    <select v-model="flavor.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
+                  <div class="col-span-5">
+                    <select
+                      v-model="flavor.ingredientProductId"
+                      class="w-full px-3 py-2 border rounded-lg text-sm"
+                      @change="onFlavorIngredientChange(idx)"
+                    >
                       <option :value="0">Insumo bulk…</option>
                       <option v-for="b in bulkProducts" :key="b.id" :value="b.id">
                         {{ b.name }} ({{ formatStock(b.stock, b.stockUnit) }})
                       </option>
                     </select>
+                  </div>
+                  <div class="col-span-2">
+                    <input
+                      v-model.number="flavor.unitCost"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Costo/bola"
+                      title="Costo por bola"
+                      class="w-full px-2 py-2 border rounded-lg text-sm"
+                    />
                   </div>
                   <div class="col-span-1">
                     <button type="button" class="text-red-500 text-sm" @click="removeFlavorOption(idx)">✕</button>
@@ -465,21 +568,55 @@ onMounted(load)
                   <button type="button" class="text-sm text-brand-600 hover:underline" @click="addContainerOption">+ Envase</button>
                 </div>
                 <div v-for="(container, idx) in form.containerOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
-                  <div class="col-span-5">
+                  <div class="col-span-4">
                     <input v-model="container.name" placeholder="Nombre (Cono, vaso…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
                   </div>
-                  <div class="col-span-6">
-                    <select v-model="container.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
+                  <div class="col-span-5">
+                    <select
+                      v-model="container.ingredientProductId"
+                      class="w-full px-3 py-2 border rounded-lg text-sm"
+                      @change="onContainerIngredientChange(idx)"
+                    >
                       <option :value="0">Producto en unidades…</option>
                       <option v-for="s in simpleProducts" :key="s.id" :value="s.id">
                         {{ s.name }} ({{ formatStock(s.stock, s.stockUnit) }})
                       </option>
                     </select>
                   </div>
+                  <div class="col-span-2">
+                    <input
+                      v-model.number="container.unitCost"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Costo"
+                      title="Costo del envase"
+                      class="w-full px-2 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
                   <div class="col-span-1">
                     <button type="button" class="text-red-500 text-sm" @click="removeContainerOption(idx)">✕</button>
                   </div>
                 </div>
+              </div>
+
+              <div v-if="portionCostBreakdown" class="sm:col-span-2 p-4 bg-white border border-blue-200 rounded-xl space-y-1 text-sm">
+                <p class="font-medium text-slate-700">Costo de fabricación (referencia)</p>
+                <p class="text-slate-600">
+                  {{ portionCostBreakdown.scoops }} bola(s) (prom. sabores):
+                  <span class="font-medium">{{ formatMoney(portionCostBreakdown.scoopsCost) }}</span>
+                </p>
+                <p class="text-slate-600">
+                  Envase (promedio):
+                  <span class="font-medium">{{ formatMoney(portionCostBreakdown.avgContainer) }}</span>
+                </p>
+                <p class="text-base font-semibold text-slate-900 pt-1 border-t border-slate-100">
+                  Total estimado: {{ formatMoney(portionCostBreakdown.referenceTotal) }}
+                </p>
+                <p class="text-xs text-slate-500">
+                  Rango según sabores y envase elegidos:
+                  {{ formatMoney(portionCostBreakdown.minTotal) }} – {{ formatMoney(portionCostBreakdown.maxTotal) }}
+                </p>
               </div>
             </template>
 
@@ -505,7 +642,18 @@ onMounted(load)
             </div>
             <div>
               <label class="text-sm font-medium">Costo estimado</label>
-              <input v-model.number="form.costPrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              <input
+                v-model.number="form.costPrice"
+                type="number"
+                step="0.01"
+                min="0"
+                class="w-full mt-1 px-3 py-2 border rounded-lg"
+                :readonly="form.useOptions"
+                :class="form.useOptions ? 'bg-slate-50 text-slate-700' : ''"
+              />
+              <p v-if="form.useOptions" class="text-xs text-slate-500 mt-1">
+                Se calcula automáticamente según sabores y envases.
+              </p>
             </div>
           </div>
         </template>
