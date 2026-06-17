@@ -75,8 +75,16 @@ const unitLabels: Record<string, string> = {
   unit: 'Unidades',
 }
 
-export function stockUnitLabel(unit: string = 'unit'): string {
-  return unitLabels[unit] ?? unit
+export function parseDecimalInput(raw: string): number {
+  const s = raw.trim().replace(/\s/g, '').replace(',', '.')
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : 0
+}
+
+export function formatCostInput(value: number | string | undefined): string {
+  const n = Number(value ?? 0)
+  if (!n) return ''
+  return String(n)
 }
 
 /** Cantidad de un movimiento con signo y unidad correcta */

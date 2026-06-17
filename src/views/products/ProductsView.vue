@@ -6,7 +6,14 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { Product, Category, ProductType, StockUnit, ProductRecipe } from '@/types'
-import { formatMoney, formatStock, productTypeLabel } from '@/utils/format'
+import { formatMoney, formatStock, productTypeLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
+
+type OptionRow = {
+  name: string
+  ingredientProductId: number
+  unitCost: number
+  costManual: boolean
+}
 
 const auth = useAuthStore()
 const products = ref<Product[]>([])
@@ -30,11 +37,11 @@ const form = ref({
   portionSize: 90,
   scoopCount: 1,
   useOptions: false,
-  flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0 }],
+  flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }] as OptionRow[],
   containerOptions: [
-    { name: 'Galleta', ingredientProductId: 0, unitCost: 0 },
-    { name: 'Vaso', ingredientProductId: 0, unitCost: 0 },
-  ],
+    { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
+    { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
+  ] as OptionRow[],
   salePrice: 0,
   costPrice: 0,
   stock: 0,
@@ -89,14 +96,28 @@ function onFlavorIngredientChange(idx: number) {
   const row = form.value.flavorOptions[idx]
   if (row.ingredientProductId) {
     row.unitCost = flavorCostFromBulk(row.ingredientProductId)
+    row.costManual = false
   }
+}
+
+function setFlavorCost(idx: number, raw: string) {
+  const row = form.value.flavorOptions[idx]
+  row.unitCost = parseDecimalInput(raw)
+  row.costManual = true
 }
 
 function onContainerIngredientChange(idx: number) {
   const row = form.value.containerOptions[idx]
   if (row.ingredientProductId) {
     row.unitCost = containerCostFromProduct(row.ingredientProductId)
+    row.costManual = false
   }
+}
+
+function setContainerCost(idx: number, raw: string) {
+  const row = form.value.containerOptions[idx]
+  row.unitCost = parseDecimalInput(raw)
+  row.costManual = true
 }
 
 const portionCostBreakdown = computed(() => {
@@ -173,10 +194,10 @@ function resetForm() {
     productType: 'simple', stockUnit: 'unit',
     baseProductId: undefined, portionSize: 90,
     scoopCount: 1, useOptions: false,
-    flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0 }],
+    flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }],
     containerOptions: [
-      { name: 'Galleta', ingredientProductId: 0, unitCost: 0 },
-      { name: 'Vaso', ingredientProductId: 0, unitCost: 0 },
+      { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
+      { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
     ],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
     categoryId: undefined, visibleInPos: true, recipe: [],
@@ -211,14 +232,16 @@ function openEdit(p: Product) {
       name: o.name,
       ingredientProductId: o.ingredientProductId,
       unitCost: Number(o.unitCost) || flavorCostFromBulk(o.ingredientProductId),
-    })) ?? [{ name: '', ingredientProductId: 0, unitCost: 0 }],
+      costManual: Number(o.unitCost) > 0,
+    })) ?? [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }],
     containerOptions: containerGroup?.options.map((o) => ({
       name: o.name,
       ingredientProductId: o.ingredientProductId,
       unitCost: Number(o.unitCost) || containerCostFromProduct(o.ingredientProductId),
+      costManual: Number(o.unitCost) > 0,
     })) ?? [
-      { name: 'Galleta', ingredientProductId: 0, unitCost: 0 },
-      { name: 'Vaso', ingredientProductId: 0, unitCost: 0 },
+      { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
+      { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
     ],
     salePrice: Number(p.salePrice),
     costPrice: Number(p.costPrice),
@@ -236,7 +259,7 @@ function openEdit(p: Product) {
 }
 
 function addFlavorOption() {
-  form.value.flavorOptions.push({ name: '', ingredientProductId: 0, unitCost: 0 })
+  form.value.flavorOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
 }
 
 function removeFlavorOption(idx: number) {
@@ -244,7 +267,7 @@ function removeFlavorOption(idx: number) {
 }
 
 function addContainerOption() {
-  form.value.containerOptions.push({ name: '', ingredientProductId: 0, unitCost: 0 })
+  form.value.containerOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
 }
 
 function removeContainerOption(idx: number) {
@@ -280,7 +303,7 @@ watch(() => form.value.productType, (type) => {
 watch(() => [form.value.portionSize, form.value.stockUnit] as const, () => {
   if (!form.value.useOptions) return
   form.value.flavorOptions.forEach((row, idx) => {
-    if (row.ingredientProductId) onFlavorIngredientChange(idx)
+    if (row.ingredientProductId && !row.costManual) onFlavorIngredientChange(idx)
   })
 })
 
@@ -553,6 +576,11 @@ onMounted(load)
                   <label class="text-sm font-medium">Sabores disponibles</label>
                   <button type="button" class="text-sm text-brand-600 hover:underline" @click="addFlavorOption">+ Sabor</button>
                 </div>
+                <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
+                  <div class="col-span-4">Nombre</div>
+                  <div class="col-span-5">Insumo</div>
+                  <div class="col-span-2">Costo/bola</div>
+                </div>
                 <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
                   <div class="col-span-4">
                     <input v-model="flavor.name" placeholder="Nombre (Fresa…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
@@ -571,13 +599,13 @@ onMounted(load)
                   </div>
                   <div class="col-span-2">
                     <input
-                      v-model.number="flavor.unitCost"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Costo/bola"
-                      title="Costo por bola"
+                      type="text"
+                      inputmode="decimal"
+                      :value="formatCostInput(flavor.unitCost)"
+                      placeholder="0"
+                      title="Costo por bola — editable"
                       class="w-full px-2 py-2 border rounded-lg text-sm"
+                      @input="setFlavorCost(idx, ($event.target as HTMLInputElement).value)"
                     />
                   </div>
                   <div class="col-span-1">
@@ -609,13 +637,13 @@ onMounted(load)
                   </div>
                   <div class="col-span-2">
                     <input
-                      v-model.number="container.unitCost"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Costo"
-                      title="Costo del envase"
+                      type="text"
+                      inputmode="decimal"
+                      :value="formatCostInput(container.unitCost)"
+                      placeholder="0"
+                      title="Costo del envase — editable"
                       class="w-full px-2 py-2 border rounded-lg text-sm"
+                      @input="setContainerCost(idx, ($event.target as HTMLInputElement).value)"
                     />
                   </div>
                   <div class="col-span-1">
