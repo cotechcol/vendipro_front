@@ -206,13 +206,17 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             :key="p.id"
             :disabled="processing || !isAvailable(p)"
             :class="[
-              'border rounded-xl p-4 text-left transition-all disabled:pointer-events-none',
+              'border rounded-xl p-3 text-left transition-all disabled:pointer-events-none',
               isAvailable(p)
                 ? 'bg-white border-slate-200 hover:border-primary-500 hover:shadow-md active:scale-95'
                 : 'bg-slate-50 border-slate-100 opacity-60 cursor-not-allowed',
             ]"
             @click="handleProductClick(p)"
           >
+            <div class="w-full aspect-square rounded-lg bg-slate-100 mb-2 overflow-hidden flex items-center justify-center">
+              <img v-if="p.imageUrl" :src="p.imageUrl" :alt="p.name" class="w-full h-full object-cover" />
+              <span v-else class="text-3xl text-slate-300">📦</span>
+            </div>
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
             <p v-if="!isAvailable(p)" class="text-xs text-red-500 font-medium mt-1">Sin stock</p>

@@ -83,6 +83,7 @@ export interface Product {
   category?: Category
   active: boolean
   visibleInPos?: boolean
+  imageUrl?: string
 }
 
 export interface Customer {

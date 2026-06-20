@@ -27,6 +27,12 @@ const showModal = ref(false)
 const editing = ref<Product | null>(null)
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
 
+const imageFile = ref<File | null>(null)
+const imagePreviewUrl = ref<string | null>(null)
+const editingImageUrl = ref<string | null>(null)
+
+const displayedImageUrl = computed(() => imagePreviewUrl.value || editingImageUrl.value)
+
 const form = ref({
   sku: '',
   name: '',
@@ -201,6 +207,55 @@ async function load() {
   }
 }
 
+function clearImageState() {
+  if (imagePreviewUrl.value?.startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+  imageFile.value = null
+  imagePreviewUrl.value = null
+  editingImageUrl.value = null
+}
+
+function onImageChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) {
+    toast.value = { show: true, message: 'Solo imágenes JPG, PNG, WEBP o GIF', type: 'error' }
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast.value = { show: true, message: 'La imagen no puede superar 5 MB', type: 'error' }
+    return
+  }
+  if (imagePreviewUrl.value?.startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+  imageFile.value = file
+  imagePreviewUrl.value = URL.createObjectURL(file)
+}
+
+async function removeProductImage() {
+  if (!editing.value?.id) {
+    clearImageState()
+    return
+  }
+  try {
+    await api.delete(`/products/${editing.value.id}/image`)
+    clearImageState()
+    toast.value = { show: true, message: 'Imagen eliminada', type: 'success' }
+    await load()
+  } catch {
+    toast.value = { show: true, message: 'No se pudo eliminar la imagen', type: 'error' }
+  }
+}
+
+async function uploadProductImage(productId: number) {
+  if (!imageFile.value) return
+  const fd = new FormData()
+  fd.append('image', imageFile.value)
+  await api.post(`/products/${productId}/image`, fd)
+}
+
 function resetForm() {
   form.value = {
     sku: '', name: '', description: '',
@@ -215,6 +270,7 @@ function resetForm() {
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
     categoryId: undefined, visibleInPos: true, recipe: [],
   }
+  clearImageState()
 }
 
 function openCreate() {
@@ -225,6 +281,8 @@ function openCreate() {
 
 function openEdit(p: Product) {
   editing.value = p
+  clearImageState()
+  editingImageUrl.value = p.imageUrl ?? null
   const flavorGroup = p.optionGroups?.find((g) => g.kind === 'flavor')
   const containerGroup = p.optionGroups?.find((g) => g.kind === 'container')
   const hasOptions = !!p.optionGroups?.length
@@ -394,9 +452,17 @@ async function save() {
     if (editing.value) {
       await api.patch(`/products/${editing.value.id}`, payload)
     } else {
-      await api.post('/products', payload)
+      const res = await api.post('/products', payload)
+      editing.value = { ...res.data, id: res.data.id } as Product
     }
+
+    const productId = editing.value!.id
+    if (imageFile.value) {
+      await uploadProductImage(productId)
+    }
+
     showModal.value = false
+    clearImageState()
     toast.value = { show: true, message: 'Producto guardado', type: 'success' }
     await load()
   } catch (e: unknown) {
@@ -456,6 +522,7 @@ onMounted(load)
         <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-600">
             <tr>
+              <th class="text-left px-4 py-3 w-14"></th>
               <th class="text-left px-4 py-3">SKU</th>
               <th class="text-left px-4 py-3">Nombre</th>
               <th class="text-left px-4 py-3">Tipo</th>
@@ -467,9 +534,15 @@ onMounted(load)
             </tr>
           </thead>
           <tbody>
-            <tr v-if="loading"><td colspan="8" class="px-4 py-8 text-center text-slate-400">Cargando...</td></tr>
-            <tr v-else-if="filtered.length === 0"><td colspan="8" class="px-4 py-8 text-center text-slate-400">Sin productos</td></tr>
+            <tr v-if="loading"><td colspan="9" class="px-4 py-8 text-center text-slate-400">Cargando...</td></tr>
+            <tr v-else-if="filtered.length === 0"><td colspan="9" class="px-4 py-8 text-center text-slate-400">Sin productos</td></tr>
             <tr v-for="p in filtered" :key="p.id" class="border-t border-slate-100 hover:bg-slate-50">
+              <td class="px-4 py-3">
+                <div class="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                  <img v-if="p.imageUrl" :src="p.imageUrl" :alt="p.name" class="w-full h-full object-cover" />
+                  <span v-else class="text-slate-300 text-lg">📦</span>
+                </div>
+              </td>
               <td class="px-4 py-3 font-mono text-xs">{{ p.sku }}</td>
               <td class="px-4 py-3 font-medium">{{ p.name }}</td>
               <td class="px-4 py-3 text-slate-500">{{ productTypeLabel(p.productType) }}</td>
@@ -519,6 +592,27 @@ onMounted(load)
           <div><label class="text-sm font-medium">SKU</label><input v-model="form.sku" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
           <div class="sm:col-span-2"><label class="text-sm font-medium">Nombre</label><input v-model="form.name" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
           <div class="sm:col-span-2"><label class="text-sm font-medium">Descripción</label><input v-model="form.description" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
+          <div v-if="form.productType !== 'bulk'" class="sm:col-span-2">
+            <label class="text-sm font-medium">Foto del producto</label>
+            <div class="mt-2 flex flex-wrap items-start gap-4">
+              <div class="w-24 h-24 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                <img v-if="displayedImageUrl" :src="displayedImageUrl" alt="Vista previa" class="w-full h-full object-cover" />
+                <span v-else class="text-3xl text-slate-300">📷</span>
+              </div>
+              <div class="flex flex-col gap-2 min-w-0">
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="text-sm" @change="onImageChange" />
+                <p class="text-xs text-slate-500">JPG, PNG, WEBP o GIF. Máx. 5 MB. Se guarda en Supabase.</p>
+                <button
+                  v-if="displayedImageUrl"
+                  type="button"
+                  class="text-sm text-red-600 hover:underline text-left w-fit"
+                  @click="removeProductImage"
+                >
+                  Quitar imagen
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Insumo base -->

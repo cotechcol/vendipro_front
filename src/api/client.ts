@@ -27,6 +27,10 @@ api.interceptors.request.use((config) => {
     if (parsed) config.headers['X-Store-Id'] = String(parsed)
   }
 
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
+  }
+
   trackLoading(config, true)
   return config
 })
