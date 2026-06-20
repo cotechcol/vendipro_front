@@ -62,9 +62,22 @@ const productTypeOptions: { value: ProductType; label: string }[] = [
   { value: 'composite', label: 'Compuesto (receta)' },
 ]
 
-const portionSizeLabel = computed(() =>
-  form.value.stockUnit === 'ml' ? 'Mililitros por bola' : 'Gramos por bola',
-)
+const portionSizeLabel = computed(() => {
+  if (form.value.stockUnit === 'ml') return 'Mililitros por bola'
+  if (form.value.stockUnit === 'unit') return 'Unidades por bola'
+  return 'Gramos por bola'
+})
+
+const bulkStockHint = computed(() => {
+  if (form.value.stockUnit === 'unit') return 'Ej: 50 uds = 50 panes o envases'
+  if (form.value.stockUnit === 'ml') return 'Ej: 5000 ml = 5 litros'
+  return 'Ej: 10000 g = 10 kg de helado'
+})
+
+const bulkMinStockHint = computed(() => {
+  if (form.value.stockUnit === 'unit') return 'Ej: 5 uds — te avisa cuando llegue'
+  return 'Ej: 1 g — te avisa cuando llegue'
+})
 
 const filtered = computed(() => {
   let list = products.value
@@ -221,7 +234,7 @@ function openEdit(p: Product) {
     name: p.name,
     description: p.description || '',
     productType: p.productType,
-    stockUnit: p.productType === 'portion' && p.stockUnit !== 'g' && p.stockUnit !== 'ml'
+    stockUnit: p.productType === 'portion' && !['g', 'ml', 'unit'].includes(p.stockUnit)
       ? 'g'
       : p.stockUnit,
     baseProductId: p.baseProductId ?? undefined,
@@ -291,7 +304,7 @@ watch(() => form.value.productType, (type) => {
     form.value.visibleInPos = true
   }
   if (type === 'portion') {
-    if (form.value.stockUnit !== 'g' && form.value.stockUnit !== 'ml') {
+    if (!['g', 'ml', 'unit'].includes(form.value.stockUnit)) {
       form.value.stockUnit = 'g'
     }
     if (!form.value.portionSize) form.value.portionSize = 90
@@ -329,7 +342,7 @@ async function save() {
     } else if (form.value.productType === 'portion') {
       delete payload.recipe
       payload.stock = 0
-      if (form.value.stockUnit !== 'g' && form.value.stockUnit !== 'ml') {
+      if (!['g', 'ml', 'unit'].includes(form.value.stockUnit)) {
         payload.stockUnit = 'g'
       }
       if (form.value.useOptions) {
@@ -498,7 +511,7 @@ onMounted(load)
             <label class="text-sm font-medium">Tipo de producto</label>
             <select v-model="form.productType" class="w-full mt-1 px-3 py-2 border rounded-lg" :disabled="!!editing">
               <option value="simple">Unidad (botella, paquete…)</option>
-              <option value="bulk">Insumo base (helado, piña… en g/ml)</option>
+              <option value="bulk">Insumo base (helado, pan, envase… en g/ml/uds)</option>
               <option value="portion">Porción de venta (bola 90 g…)</option>
               <option value="composite">Compuesto / receta (hamburguesa…)</option>
             </select>
@@ -516,20 +529,21 @@ onMounted(load)
               <select v-model="form.stockUnit" class="w-full mt-1 px-3 py-2 border rounded-lg">
                 <option value="g">Gramos (g)</option>
                 <option value="ml">Mililitros (ml)</option>
+                <option value="unit">Unidades (uds)</option>
               </select>
             </div>
             <div v-if="!editing">
               <label class="text-sm font-medium">Stock inicial</label>
-              <input v-model.number="form.stock" type="number" step="0.001" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
-              <p class="text-xs text-slate-500 mt-1">Ej: 10000 g = 10 kg de helado</p>
+              <input v-model.number="form.stock" type="number" :step="form.stockUnit === 'unit' ? 1 : 0.001" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              <p class="text-xs text-slate-500 mt-1">{{ bulkStockHint }}</p>
             </div>
             <div>
               <label class="text-sm font-medium">Alerta mínima</label>
-              <input v-model.number="form.minStock" type="number" step="0.001" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
-              <p class="text-xs text-slate-500 mt-1">Ej: 1 g — te avisa cuando llegue</p>
+              <input v-model.number="form.minStock" type="number" :step="form.stockUnit === 'unit' ? 1 : 0.001" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              <p class="text-xs text-slate-500 mt-1">{{ bulkMinStockHint }}</p>
             </div>
             <div>
-              <label class="text-sm font-medium">Costo por {{ form.stockUnit }}</label>
+              <label class="text-sm font-medium">Costo por {{ form.stockUnit === 'unit' ? 'ud' : form.stockUnit }}</label>
               <input v-model.number="form.costPrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
             </div>
           </div>
@@ -567,6 +581,7 @@ onMounted(load)
                   <select v-model="form.stockUnit" class="w-20 shrink-0 px-2 py-2 border rounded-lg">
                     <option value="g">g</option>
                     <option value="ml">ml</option>
+                    <option value="unit">uds</option>
                   </select>
                 </div>
               </div>
@@ -695,6 +710,7 @@ onMounted(load)
                   <select v-model="form.stockUnit" class="w-20 shrink-0 px-2 py-2 border rounded-lg">
                     <option value="g">g</option>
                     <option value="ml">ml</option>
+                    <option value="unit">uds</option>
                   </select>
                 </div>
               </div>

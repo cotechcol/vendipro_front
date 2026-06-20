@@ -235,7 +235,7 @@ onMounted(load)
       <StatCard
         title="Unidades en stock"
         :value="formatQuantity(summary.totalUnits)"
-        :trend="summary.bulkInsumos ? `${summary.bulkInsumos} insumos base (g/ml)` : undefined"
+        :trend="summary.bulkInsumos ? `${summary.bulkInsumos} insumos base` : undefined"
         icon="📊"
         color="brand"
       />
