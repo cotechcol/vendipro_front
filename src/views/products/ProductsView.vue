@@ -30,6 +30,7 @@ const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'er
 const imageFile = ref<File | null>(null)
 const imagePreviewUrl = ref<string | null>(null)
 const editingImageUrl = ref<string | null>(null)
+const imageInputRef = ref<HTMLInputElement | null>(null)
 
 const displayedImageUrl = computed(() => imagePreviewUrl.value || editingImageUrl.value)
 
@@ -214,6 +215,10 @@ function clearImageState() {
   imageFile.value = null
   imagePreviewUrl.value = null
   editingImageUrl.value = null
+}
+
+function openImagePicker() {
+  imageInputRef.value?.click()
 }
 
 function onImageChange(e: Event) {
@@ -599,17 +604,31 @@ onMounted(load)
                 <img v-if="displayedImageUrl" :src="displayedImageUrl" alt="Vista previa" class="w-full h-full object-cover" />
                 <span v-else class="text-3xl text-slate-300">📷</span>
               </div>
-              <div class="flex flex-col gap-2 min-w-0">
-                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="text-sm" @change="onImageChange" />
-                <p class="text-xs text-slate-500">JPG, PNG, WEBP o GIF. Máx. 5 MB. Se guarda en Supabase.</p>
-                <button
-                  v-if="displayedImageUrl"
-                  type="button"
-                  class="text-sm text-red-600 hover:underline text-left w-fit"
-                  @click="removeProductImage"
-                >
-                  Quitar imagen
-                </button>
+              <div class="flex flex-col gap-2 min-w-0 flex-1">
+                <input
+                  ref="imageInputRef"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  class="hidden"
+                  @change="onImageChange"
+                />
+                <div class="flex flex-wrap items-center gap-2">
+                  <button type="button" class="btn-secondary !py-2 !px-4 text-sm" @click="openImagePicker">
+                    {{ displayedImageUrl ? 'Cambiar foto' : 'Seleccionar imagen' }}
+                  </button>
+                  <button
+                    v-if="displayedImageUrl"
+                    type="button"
+                    class="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-2 hover:bg-red-50"
+                    @click="removeProductImage"
+                  >
+                    Quitar
+                  </button>
+                </div>
+                <p v-if="imageFile" class="text-xs text-slate-600 truncate">
+                  Archivo: {{ imageFile.name }}
+                </p>
+                <p class="text-xs text-slate-500">JPG, PNG, WEBP o GIF. Máx. 5 MB. Se guarda al pulsar «Guardar producto».</p>
               </div>
             </div>
           </div>
