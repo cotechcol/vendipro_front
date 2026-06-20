@@ -3,8 +3,16 @@ import { useLoadingStore } from '@/stores/loading'
 
 const MUTATING_METHODS = new Set(['post', 'patch', 'put', 'delete'])
 
+/** Backend en Vercel usa prefijo /api; normaliza URLs de producción mal configuradas */
+function resolveApiBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || '/api'
+  if (!raw.startsWith('http')) return raw
+  const base = raw.replace(/\/+$/, '')
+  return base.endsWith('/api') ? base : `${base}/api`
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: resolveApiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
 })
 
