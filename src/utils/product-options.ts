@@ -47,3 +47,30 @@ export function maxScoopsForFlavor(opt: ProductOption): number {
   if (qty <= 0) return 0
   return Math.floor(ingredientStock(opt) / qty)
 }
+
+/** Precio unitario de venta incluyendo adicionales seleccionados */
+export function calculateItemUnitPrice(
+  product: { salePrice: number; optionGroups?: { kind: string; options: ProductOption[] }[] },
+  selectedOptionIds?: number[],
+): number {
+  let price = Number(product.salePrice)
+  if (!selectedOptionIds?.length || !product.optionGroups?.length) return price
+
+  const optionMap = new Map<number, ProductOption>()
+  const groupKindByOption = new Map<number, string>()
+  for (const group of product.optionGroups) {
+    for (const option of group.options ?? []) {
+      optionMap.set(option.id, option)
+      groupKindByOption.set(option.id, group.kind)
+    }
+  }
+
+  for (const optionId of selectedOptionIds) {
+    const option = optionMap.get(optionId)
+    if (option && groupKindByOption.get(optionId) === 'addon') {
+      price += Number(option.unitPrice ?? 0)
+    }
+  }
+
+  return Number(price.toFixed(2))
+}

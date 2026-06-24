@@ -21,7 +21,7 @@ const cart = useCartStore()
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium truncate">{{ item.product.name }}</p>
           <p v-if="item.optionLabel" class="text-xs text-slate-400 truncate">{{ item.optionLabel }}</p>
-          <p class="text-xs text-slate-500">{{ formatMoney(Number(item.product.salePrice)) }}</p>
+          <p class="text-xs text-slate-500">{{ formatMoney(cart.itemUnitPrice(item)) }}</p>
         </div>
         <div class="flex items-center gap-1">
           <button :disabled="processing" class="w-7 h-7 bg-white border rounded text-sm disabled:opacity-50" @click="cart.updateQuantity(item.cartKey, item.quantity - 1)">-</button>

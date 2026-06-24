@@ -15,6 +15,14 @@ type OptionRow = {
   costManual: boolean
 }
 
+type AddonRow = {
+  name: string
+  ingredientProductId: number
+  unitCost: number
+  unitPrice: number
+  costManual: boolean
+}
+
 const auth = useAuthStore()
 const products = ref<Product[]>([])
 const categories = ref<Category[]>([])
@@ -56,6 +64,7 @@ const form = ref({
   categoryId: undefined as number | undefined,
   visibleInPos: true,
   recipe: [] as ProductRecipe[],
+  addonOptions: [] as AddonRow[],
 })
 
 const simpleProducts = computed(() =>
@@ -110,6 +119,10 @@ function flavorCostFromBulk(bulkId: number): number {
 function containerCostFromProduct(productId: number): number {
   const p = simpleProducts.value.find((s) => s.id === productId)
   return p ? Number(p.costPrice) : 0
+}
+
+function addonCostFromProduct(productId: number): number {
+  return containerCostFromProduct(productId)
 }
 
 function onFlavorIngredientChange(idx: number) {
@@ -273,7 +286,7 @@ function resetForm() {
       { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
     ],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
-    categoryId: undefined, visibleInPos: true, recipe: [],
+    categoryId: undefined, visibleInPos: true, recipe: [], addonOptions: [],
   }
   clearImageState()
 }
@@ -290,7 +303,8 @@ function openEdit(p: Product) {
   editingImageUrl.value = p.imageUrl ?? null
   const flavorGroup = p.optionGroups?.find((g) => g.kind === 'flavor')
   const containerGroup = p.optionGroups?.find((g) => g.kind === 'container')
-  const hasOptions = !!p.optionGroups?.length
+  const addonGroup = p.optionGroups?.find((g) => g.kind === 'addon')
+  const hasOptions = !!flavorGroup || !!containerGroup
 
   form.value = {
     sku: p.sku,
@@ -330,6 +344,13 @@ function openEdit(p: Product) {
       quantity: Number(r.quantity),
       unit: r.unit,
     })),
+    addonOptions: addonGroup?.options.map((o) => ({
+      name: o.name,
+      ingredientProductId: o.ingredientProductId,
+      unitCost: Number(o.unitCost) || addonCostFromProduct(o.ingredientProductId),
+      unitPrice: Number(o.unitPrice) || 0,
+      costManual: Number(o.unitCost) > 0,
+    })) ?? [],
   }
   showModal.value = true
 }
@@ -339,7 +360,10 @@ function addFlavorOption() {
 }
 
 function removeFlavorOption(idx: number) {
-  if (form.value.flavorOptions.length > 1) form.value.flavorOptions.splice(idx, 1)
+  form.value.flavorOptions.splice(idx, 1)
+  if (form.value.flavorOptions.length === 0) {
+    form.value.flavorOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
+  }
 }
 
 function addContainerOption() {
@@ -347,7 +371,10 @@ function addContainerOption() {
 }
 
 function removeContainerOption(idx: number) {
-  if (form.value.containerOptions.length > 1) form.value.containerOptions.splice(idx, 1)
+  form.value.containerOptions.splice(idx, 1)
+  if (form.value.containerOptions.length === 0) {
+    form.value.containerOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
+  }
 }
 
 function addRecipeLine() {
@@ -356,6 +383,29 @@ function addRecipeLine() {
 
 function removeRecipeLine(idx: number) {
   form.value.recipe.splice(idx, 1)
+}
+
+function addAddonOption() {
+  form.value.addonOptions.push({
+    name: '', ingredientProductId: 0, unitCost: 0, unitPrice: 0, costManual: false,
+  })
+}
+
+function removeAddonOption(idx: number) {
+  form.value.addonOptions.splice(idx, 1)
+}
+
+function onAddonIngredientChange(idx: number) {
+  const row = form.value.addonOptions[idx]
+  if (row.ingredientProductId && !row.costManual) {
+    row.unitCost = addonCostFromProduct(row.ingredientProductId)
+  }
+}
+
+function setAddonCost(idx: number, raw: string) {
+  const row = form.value.addonOptions[idx]
+  row.unitCost = parseDecimalInput(raw)
+  row.costManual = true
 }
 
 watch(() => form.value.productType, (type) => {
@@ -374,6 +424,7 @@ watch(() => form.value.productType, (type) => {
     if (!editing.value) form.value.useOptions = true
   }
   if (type === 'composite' && form.value.recipe.length === 0) addRecipeLine()
+  if (type === 'composite' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
 })
 
 watch(() => [form.value.portionSize, form.value.stockUnit] as const, () => {
@@ -447,6 +498,22 @@ async function save() {
       delete payload.portionSize
       payload.stock = 0
       payload.recipe = form.value.recipe.filter((r) => r.ingredientProductId && r.quantity > 0)
+      const addons = form.value.addonOptions.filter((o) => o.name && o.ingredientProductId)
+      if (addons.length) {
+        payload.optionGroups = [{
+          name: 'Adicionales',
+          kind: 'addon',
+          options: addons.map((o) => ({
+            name: o.name,
+            ingredientProductId: o.ingredientProductId,
+            unitCost: Number(o.unitCost) || 0,
+            unitPrice: Number(o.unitPrice) || 0,
+          })),
+        }]
+      } else {
+        payload.optionGroups = []
+      }
+      delete payload.addonOptions
     } else {
       delete payload.baseProductId
       delete payload.portionSize
@@ -883,12 +950,70 @@ onMounted(load)
             </div>
             <div class="grid grid-cols-2 gap-4 pt-2">
               <div>
-                <label class="text-sm font-medium">Precio venta</label>
+                <label class="text-sm font-medium">Precio venta base</label>
                 <input v-model.number="form.salePrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
               </div>
               <div>
-                <label class="text-sm font-medium">Costo estimado</label>
+                <label class="text-sm font-medium">Costo estimado base</label>
                 <input v-model.number="form.costPrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-purple-200 space-y-2">
+              <div class="flex justify-between items-center">
+                <label class="text-sm font-medium">Adicionales (opcionales en POS)</label>
+                <button type="button" class="text-sm text-brand-600 hover:underline" @click="addAddonOption">+ Adicional</button>
+              </div>
+              <p class="text-xs text-slate-500">
+                Ej: papas (+$3.000 al cliente, te cuestan $2.000). El precio base no cambia si no los eligen.
+              </p>
+              <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
+                <div class="col-span-3">Nombre</div>
+                <div class="col-span-4">Producto / insumo</div>
+                <div class="col-span-2">Tu costo</div>
+                <div class="col-span-2">Precio extra</div>
+              </div>
+              <div v-for="(addon, idx) in form.addonOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
+                <div class="col-span-3">
+                  <input v-model="addon.name" placeholder="Papas, bebida…" class="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div class="col-span-4">
+                  <select
+                    v-model="addon.ingredientProductId"
+                    class="w-full px-3 py-2 border rounded-lg text-sm"
+                    @change="onAddonIngredientChange(idx)"
+                  >
+                    <option :value="0">Producto…</option>
+                    <option v-for="ing in ingredientOptions" :key="ing.id" :value="ing.id">
+                      {{ ing.name }} ({{ formatStock(ing.stock, ing.stockUnit) }})
+                    </option>
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    :value="formatCostInput(addon.unitCost)"
+                    placeholder="0"
+                    title="Tu costo por adicional"
+                    class="w-full px-2 py-2 border rounded-lg text-sm"
+                    @input="setAddonCost(idx, ($event.target as HTMLInputElement).value)"
+                  />
+                </div>
+                <div class="col-span-2">
+                  <input
+                    v-model.number="addon.unitPrice"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0"
+                    title="Precio extra al cliente"
+                    class="w-full px-2 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                <div class="col-span-1">
+                  <button type="button" class="text-red-500 text-sm" @click="removeAddonOption(idx)">✕</button>
+                </div>
               </div>
             </div>
           </div>

@@ -94,8 +94,20 @@ function printTicket() {
   if (el) printHtmlElement(el)
 }
 
+function optionsHint(p: Product): string {
+  const hasAddons = p.optionGroups?.some((g) => g.kind === 'addon')
+  const hasIceCream = p.optionGroups?.some((g) => g.kind === 'flavor' || g.kind === 'container')
+  if (hasAddons) return 'Toca para elegir adicionales'
+  if (hasIceCream || p.scoopCount) return 'Toca para elegir sabor y envase'
+  return 'Toca para opciones'
+}
+
 function hasConfigurableOptions(p: Product): boolean {
   return (p.optionGroups?.length ?? 0) > 0 || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
+}
+
+function showFromPrice(p: Product): boolean {
+  return (p.optionGroups?.some((g) => g.kind === 'addon') ?? false)
 }
 
 function sellableCount(p: Product): number {
@@ -145,9 +157,9 @@ async function handleProductClick(p: Product) {
   cart.addProduct(p)
 }
 
-function onOptionsConfirm(selectedOptionIds: number[], label: string) {
+function onOptionsConfirm(selectedOptionIds: number[], label: string, unitPrice: number) {
   if (optionsProduct.value) {
-    cart.addProduct(optionsProduct.value, selectedOptionIds, label)
+    cart.addProduct(optionsProduct.value, selectedOptionIds, label, unitPrice)
   }
   showOptions.value = false
   optionsProduct.value = null
@@ -221,10 +233,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
             <p v-if="!isAvailable(p)" class="text-xs text-red-500 font-medium mt-1">Sin stock</p>
             <p v-else-if="hasConfigurableOptions(p)" class="text-xs text-primary-600 font-medium mt-1">
-              Toca para elegir sabor y envase
+              {{ optionsHint(p) }}
             </p>
             <div class="flex justify-between items-end mt-2">
-              <span class="text-primary-600 font-bold">{{ formatMoney(Number(p.salePrice)) }}</span>
+              <span class="text-primary-600 font-bold">
+                {{ showFromPrice(p) ? `Desde ${formatMoney(Number(p.salePrice))}` : formatMoney(Number(p.salePrice)) }}
+              </span>
               <span class="text-xs" :class="isAvailable(p) ? 'text-slate-400' : 'text-red-400'">
                 {{ sellableCount(p) }} disp.
               </span>

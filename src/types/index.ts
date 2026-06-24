@@ -31,7 +31,7 @@ export interface Category {
 
 export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite'
 export type StockUnit = 'unit' | 'g' | 'ml'
-export type OptionGroupKind = 'flavor' | 'container'
+export type OptionGroupKind = 'flavor' | 'container' | 'addon'
 
 export interface ProductRecipe {
   id?: number
@@ -48,6 +48,7 @@ export interface ProductOption {
   quantity: number
   unit: StockUnit
   unitCost?: number
+  unitPrice?: number
   ingredient?: Product
 }
 
@@ -170,6 +171,7 @@ export interface CartItem {
   quantity: number
   selectedOptionIds?: number[]
   optionLabel?: string
+  unitPrice?: number
   cartKey: string
 }
 

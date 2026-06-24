@@ -1,10 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { CartItem, Product } from '@/types'
+import { calculateItemUnitPrice } from '@/utils/product-options'
 
 function buildCartKey(productId: number, selectedOptionIds?: number[]): string {
   const opts = (selectedOptionIds ?? []).slice().sort((a, b) => a - b).join(',')
   return opts ? `${productId}:${opts}` : String(productId)
+}
+
+function itemUnitPrice(item: CartItem): number {
+  return item.unitPrice ?? calculateItemUnitPrice(item.product, item.selectedOptionIds)
 }
 
 export const useCartStore = defineStore('cart', () => {
@@ -14,7 +19,7 @@ export const useCartStore = defineStore('cart', () => {
   const amountPaid = ref<number>(0)
 
   const total = computed(() =>
-    items.value.reduce((sum, i) => sum + Number(i.product.salePrice) * i.quantity, 0),
+    items.value.reduce((sum, i) => sum + itemUnitPrice(i) * i.quantity, 0),
   )
 
   const itemCount = computed(() =>
@@ -25,9 +30,15 @@ export const useCartStore = defineStore('cart', () => {
     return product.sellableUnits ?? Math.floor(Number(product.stock))
   }
 
-  function addProduct(product: Product, selectedOptionIds?: number[], optionLabel?: string) {
+  function addProduct(
+    product: Product,
+    selectedOptionIds?: number[],
+    optionLabel?: string,
+    unitPrice?: number,
+  ) {
     const cartKey = buildCartKey(product.id, selectedOptionIds)
     const max = maxQty(product)
+    const price = unitPrice ?? calculateItemUnitPrice(product, selectedOptionIds)
     const existing = items.value.find((i) => i.cartKey === cartKey)
     if (existing) {
       if (existing.quantity < max) existing.quantity++
@@ -37,6 +48,7 @@ export const useCartStore = defineStore('cart', () => {
         quantity: 1,
         selectedOptionIds,
         optionLabel,
+        unitPrice: price,
         cartKey,
       })
     }
@@ -69,6 +81,6 @@ export const useCartStore = defineStore('cart', () => {
   return {
     items, customerId, paymentMethod, amountPaid,
     total, itemCount,
-    addProduct, updateQuantity, removeItem, clear,
+    addProduct, updateQuantity, removeItem, clear, itemUnitPrice,
   }
 })
