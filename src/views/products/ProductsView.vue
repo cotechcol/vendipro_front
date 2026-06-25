@@ -545,9 +545,14 @@ async function save() {
 
 async function remove(id: number) {
   if (!confirm('¿Eliminar producto?')) return
-  await api.delete(`/products/${id}`)
-  toast.value = { show: true, message: 'Producto eliminado', type: 'success' }
-  await load()
+  try {
+    await api.delete(`/products/${id}`)
+    toast.value = { show: true, message: 'Producto eliminado', type: 'success' }
+    await load()
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'No se pudo eliminar el producto'
+    toast.value = { show: true, message: msg, type: 'error' }
+  }
 }
 
 async function toggleVisibleInPos(p: Product) {
