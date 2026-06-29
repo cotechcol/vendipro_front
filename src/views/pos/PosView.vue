@@ -100,12 +100,13 @@ function optionsHint(p: Product): string {
   if (hasAddons && p.productType === 'simple') return 'Toca para elegir adicionales'
   if (hasAddons) return 'Toca para elegir adicionales'
   if (p.variableScoops) return 'Toca para elegir bolas, sabor y envase'
-  if (hasIceCream || p.scoopCount) return 'Toca para elegir sabor y envase'
+  if (hasIceCream || (p.productType === 'portion' && p.scoopCount)) return 'Toca para elegir sabor y envase'
   return 'Toca para opciones'
 }
 
 function hasConfigurableOptions(p: Product): boolean {
-  return (p.optionGroups?.length ?? 0) > 0 || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
+  if ((p.optionGroups?.length ?? 0) > 0) return true
+  return p.productType === 'portion' && (p.scoopCount ?? 0) > 0
 }
 
 function displayPrice(p: Product): string {
@@ -137,7 +138,9 @@ async function handleProductClick(p: Product) {
   }
 
   let product = p
-  const needsOptions = product.optionGroups?.length || p.scoopCount
+  const needsOptions = (product.optionGroups?.length ?? 0) > 0
+    || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
+
   if (needsOptions) {
     try {
       const { data } = await api.get<Product>(`/products/${p.id}`)
@@ -156,7 +159,7 @@ async function handleProductClick(p: Product) {
     return
   }
 
-  if (p.scoopCount) {
+  if (product.productType === 'portion' && product.scoopCount) {
     toast.value = {
       show: true,
       message: 'Este helado no tiene sabores configurados. Configúralo en Productos → editar → "Con sabores y envase".',
@@ -165,7 +168,7 @@ async function handleProductClick(p: Product) {
     return
   }
 
-  cart.addProduct(p)
+  cart.addProduct(product)
 }
 
 function onOptionsConfirm(selectedOptionIds: number[], label: string, unitPrice: number) {

@@ -543,6 +543,10 @@ async function save() {
       delete payload.recipe
       delete payload.variableScoops
       delete payload.scoopPrices
+      delete payload.scoopCount
+      delete payload.useOptions
+      delete payload.flavorOptions
+      delete payload.containerOptions
       payload.stockUnit = 'unit'
       const addons = form.value.addonOptions.filter((o) => o.name && o.ingredientProductId)
       if (addons.length) {
