@@ -49,7 +49,6 @@ const form = ref({
   variableScoops: false,
   scoopPrices: [0, 0, 0] as number[],
   useOptions: false,
-  flavorOptions: [{ name: '' }] as NameRow[],
   containerOptions: [
     { name: 'Galleta' },
     { name: 'Vaso' },
@@ -110,24 +109,11 @@ const addonIngredientOptions = computed(() =>
   }),
 )
 
-function validateFlavorOptions(): string | null {
-  if (!form.value.flavorOptions.some((o) => o.name.trim())) {
-    return 'Agrega al menos un sabor con nombre.'
-  }
-  return null
-}
-
 function validateContainerOptions(): string | null {
   if (!form.value.containerOptions.some((o) => o.name.trim())) {
     return 'Agrega al menos un envase con nombre (ej. Galleta o Vaso).'
   }
   return null
-}
-
-function mapFlavorOptionsForSave() {
-  return form.value.flavorOptions
-    .filter((o) => o.name.trim())
-    .map((o) => ({ name: o.name.trim() }))
 }
 
 function mapContainerOptionsForSave() {
@@ -263,7 +249,6 @@ function resetForm() {
     baseProductId: undefined, portionSize: 90,
     scoopCount: 3, variableScoops: false, scoopPrices: [0, 0, 0],
     useOptions: false,
-    flavorOptions: [{ name: '' }],
     containerOptions: [{ name: 'Galleta' }, { name: 'Vaso' }],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
     categoryId: undefined, visibleInPos: true, recipe: [], addonOptions: [],
@@ -293,10 +278,9 @@ async function openEdit(p: Product) {
     // Usar datos del listado si falla la carga detallada
   }
 
-  const flavorGroup = product.optionGroups?.find((g) => g.kind === 'flavor')
   const containerGroup = product.optionGroups?.find((g) => g.kind === 'container')
   const addonGroup = product.optionGroups?.find((g) => g.kind === 'addon')
-  const hasOptions = !!flavorGroup || !!containerGroup
+  const hasOptions = !!containerGroup
 
   form.value = {
     sku: product.sku,
@@ -314,7 +298,6 @@ async function openEdit(p: Product) {
       ? [...product.scoopPrices, 0, 0, 0].slice(0, 3)
       : [Number(product.salePrice), Number(product.salePrice), Number(product.salePrice)],
     useOptions: hasOptions,
-    flavorOptions: flavorGroup?.options.map((o) => ({ name: o.name })) ?? [{ name: '' }],
     containerOptions: containerGroup?.options.map((o) => ({ name: o.name })) ?? [
       { name: 'Galleta' },
       { name: 'Vaso' },
@@ -342,17 +325,6 @@ async function openEdit(p: Product) {
     addAddonOption()
   }
   showModal.value = true
-}
-
-function addFlavorOption() {
-  form.value.flavorOptions.push({ name: '' })
-}
-
-function removeFlavorOption(idx: number) {
-  form.value.flavorOptions.splice(idx, 1)
-  if (form.value.flavorOptions.length === 0) {
-    form.value.flavorOptions.push({ name: '' })
-  }
 }
 
 function addContainerOption() {
@@ -431,11 +403,6 @@ async function save() {
       }
     }
     if (form.value.productType === 'portion' && form.value.useOptions) {
-      const flavorError = validateFlavorOptions()
-      if (flavorError) {
-        toast.value = { show: true, message: flavorError, type: 'error' }
-        return
-      }
       const containerError = validateContainerOptions()
       if (containerError) {
         toast.value = { show: true, message: containerError, type: 'error' }
@@ -470,24 +437,16 @@ async function save() {
           payload.variableScoops = false
           delete payload.scoopPrices
         }
-        payload.optionGroups = [
-          {
-            name: 'Sabor',
-            kind: 'flavor',
-            options: mapFlavorOptionsForSave(),
-          },
-          {
-            name: 'Envase',
-            kind: 'container',
-            options: mapContainerOptionsForSave(),
-          },
-        ]
+        payload.optionGroups = [{
+          name: 'Envase',
+          kind: 'container',
+          options: mapContainerOptionsForSave(),
+        }]
       } else {
         delete payload.scoopCount
         delete payload.optionGroups
       }
       delete payload.useOptions
-      delete payload.flavorOptions
       delete payload.containerOptions
       delete payload.addonOptions
     } else if (form.value.productType === 'composite') {
@@ -505,7 +464,6 @@ async function save() {
       delete payload.scoopPrices
       delete payload.scoopCount
       delete payload.useOptions
-      delete payload.flavorOptions
       delete payload.containerOptions
       payload.stockUnit = 'unit'
       payload.optionGroups = buildAddonOptionGroups()
@@ -731,7 +689,7 @@ onMounted(load)
             <div class="sm:col-span-2">
               <label class="flex items-center gap-2 text-sm font-medium">
                 <input v-model="form.useOptions" type="checkbox" class="rounded" />
-                Con sabores y envase (elige al vender en POS)
+                Con envase en POS (elige al vender)
               </label>
             </div>
 
@@ -791,24 +749,6 @@ onMounted(load)
                     <option value="ml">ml</option>
                     <option value="unit">uds</option>
                   </select>
-                </div>
-              </div>
-
-              <div class="sm:col-span-2 space-y-2">
-                <div class="flex justify-between items-center">
-                  <label class="text-sm font-medium">Sabores disponibles</label>
-                  <button type="button" class="text-sm text-brand-600 hover:underline" @click="addFlavorOption">+ Sabor</button>
-                </div>
-                <p class="text-xs text-slate-500">
-                  Solo el nombre del sabor. El cliente lo elige en caja; el precio lo define el producto (1, 2 o 3 bolas).
-                </p>
-                <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="flex gap-2 items-center">
-                  <input
-                    v-model="flavor.name"
-                    placeholder="Fresa, Coco, Ron con pasas…"
-                    class="flex-1 px-3 py-2 border rounded-lg text-sm"
-                  />
-                  <button type="button" class="text-red-500 text-sm shrink-0 px-2" @click="removeFlavorOption(idx)">✕</button>
                 </div>
               </div>
 

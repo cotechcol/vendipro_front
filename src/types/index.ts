@@ -174,6 +174,7 @@ export interface CartItem {
   selectedOptionIds?: number[]
   optionLabel?: string
   unitPrice?: number
+  portionScoopCount?: number
   cartKey: string
 }
 

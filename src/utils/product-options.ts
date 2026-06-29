@@ -77,6 +77,7 @@ export function calculateItemUnitPrice(
     optionGroups?: { kind: string; options: ProductOption[] }[]
   },
   selectedOptionIds?: number[],
+  portionScoopCount?: number,
 ): number {
   let price = Number(product.salePrice)
 
@@ -84,11 +85,11 @@ export function calculateItemUnitPrice(
     product.productType === 'portion'
     && product.variableScoops
     && product.scoopPrices?.length
-    && selectedOptionIds?.length
   ) {
     const flavorCount = countSelectedByKind(product, selectedOptionIds, 'flavor')
-    if (flavorCount > 0) {
-      price = Number(product.scoopPrices[flavorCount - 1] ?? product.salePrice)
+    const scoops = portionScoopCount ?? (flavorCount > 0 ? flavorCount : 0)
+    if (scoops > 0) {
+      price = Number(product.scoopPrices[scoops - 1] ?? product.salePrice)
     }
   }
 

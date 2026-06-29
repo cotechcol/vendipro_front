@@ -4,7 +4,6 @@ import AppModal from '@/components/AppModal.vue'
 import type { Product, ProductOption } from '@/types'
 import { formatMoney } from '@/utils/format'
 import {
-  canSelectFlavorOption,
   optionHasStock,
   optionAvailableUnits,
   calculateItemUnitPrice,
@@ -17,10 +16,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  confirm: [selectedOptionIds: number[], label: string, unitPrice: number]
+  confirm: [selectedOptionIds: number[], label: string, unitPrice: number, portionScoopCount?: number]
 }>()
 
-const flavorSelections = ref<number[]>([])
 const containerSelection = ref<number | null>(null)
 const addonSelections = ref<number[]>([])
 const selectedScoopCount = ref(1)
@@ -29,10 +27,6 @@ const isComposite = computed(() => props.product?.productType === 'composite')
 const isSimple = computed(() => props.product?.productType === 'simple')
 const isPortion = computed(() => props.product?.productType === 'portion')
 const isAddonOnly = computed(() => isComposite.value || isSimple.value)
-
-const flavorGroup = computed(() =>
-  props.product?.optionGroups?.find((g) => g.kind === 'flavor'),
-)
 
 const containerGroup = computed(() =>
   props.product?.optionGroups?.find((g) => g.kind === 'container'),
@@ -62,16 +56,9 @@ const unitPrice = computed(() => {
   if (isAddonOnly.value) {
     return calculateItemUnitPrice(props.product, addonSelections.value)
   }
-  const ids = [
-    ...flavorSelections.value.filter(Boolean),
-    ...(containerSelection.value ? [containerSelection.value] : []),
-  ]
-  return calculateItemUnitPrice(props.product, ids)
+  const ids = containerSelection.value ? [containerSelection.value] : []
+  return calculateItemUnitPrice(props.product, ids, activeScoopCount.value)
 })
-
-function canSelectFlavor(scoopIndex: number, opt: ProductOption): boolean {
-  return canSelectFlavorOption(opt, scoopIndex, flavorSelections.value)
-}
 
 function canSelectContainer(opt: ProductOption): boolean {
   return optionHasStock(opt)
@@ -109,7 +96,6 @@ function toggleAddon(opt: ProductOption) {
 
 function selectScoopCount(count: number) {
   selectedScoopCount.value = count
-  flavorSelections.value = Array(count).fill(0)
   containerSelection.value = null
 }
 
@@ -122,23 +108,17 @@ const canConfirm = computed(() => {
     return true
   }
 
-  const scoops = activeScoopCount.value
-  if (flavorSelections.value.filter(Boolean).length !== scoops) return false
-  if (containerSelection.value == null) return false
-
-  for (let i = 0; i < scoops; i++) {
-    const id = flavorSelections.value[i]
-    const opt = flavorGroup.value?.options.find((o) => o.id === id)
-    if (!id || !opt || !canSelectFlavor(i, opt)) return false
+  if (containerGroup.value) {
+    if (containerSelection.value == null) return false
+    const containerOpt = containerGroup.value.options.find((o) => o.id === containerSelection.value)
+    return !!containerOpt && canSelectContainer(containerOpt)
   }
 
-  const containerOpt = containerGroup.value?.options.find((o) => o.id === containerSelection.value)
-  return !!containerOpt && canSelectContainer(containerOpt)
+  return true
 })
 
 function reset() {
   selectedScoopCount.value = 1
-  flavorSelections.value = Array(activeScoopCount.value).fill(0)
   containerSelection.value = null
   addonSelections.value = []
 }
@@ -146,23 +126,6 @@ function reset() {
 watch(() => props.show, (visible) => {
   if (visible) reset()
 })
-
-watch(activeScoopCount, (count) => {
-  if (isPortion.value && !isAddonOnly.value) {
-    flavorSelections.value = Array(count).fill(0)
-  }
-})
-
-watch(flavorSelections, () => {
-  if (containerSelection.value == null) return
-  const opt = containerGroup.value?.options.find((o) => o.id === containerSelection.value)
-  if (opt && !canSelectContainer(opt)) containerSelection.value = null
-}, { deep: true })
-
-function selectFlavor(scoopIndex: number, opt: ProductOption) {
-  if (!canSelectFlavor(scoopIndex, opt)) return
-  flavorSelections.value[scoopIndex] = opt.id
-}
 
 function buildLabel(): string {
   const labels: string[] = []
@@ -175,20 +138,11 @@ function buildLabel(): string {
     return labels.join('')
   }
 
-  const fg = flavorGroup.value
-  const cg = containerGroup.value
-
   if (variableScoops.value) {
     labels.push(`${activeScoopCount.value} bola${activeScoopCount.value > 1 ? 's' : ''}`)
   }
 
-  if (fg) {
-    const flavorNames = flavorSelections.value
-      .map((id) => fg.options.find((o) => o.id === id)?.name)
-      .filter(Boolean)
-    if (flavorNames.length) labels.push(flavorNames.join(' + '))
-  }
-
+  const cg = containerGroup.value
   if (cg && containerSelection.value) {
     const containerName = cg.options.find((o) => o.id === containerSelection.value)?.name
     if (containerName) labels.push(containerName)
@@ -199,10 +153,13 @@ function buildLabel(): string {
 
 function confirm() {
   if (!canConfirm.value || !props.product) return
-  const ids = isAddonOnly.value
-    ? [...addonSelections.value]
-    : [...flavorSelections.value.filter(Boolean), containerSelection.value!]
-  emit('confirm', ids, buildLabel(), unitPrice.value)
+  if (isAddonOnly.value) {
+    emit('confirm', [...addonSelections.value], buildLabel(), unitPrice.value)
+    return
+  }
+  const ids = containerSelection.value ? [containerSelection.value] : []
+  const scoopCount = isPortion.value && variableScoops.value ? activeScoopCount.value : undefined
+  emit('confirm', ids, buildLabel(), unitPrice.value, scoopCount)
 }
 </script>
 
@@ -271,50 +228,12 @@ function confirm() {
           </div>
         </div>
 
-        <p v-else class="text-sm text-slate-500">
-          Elige {{ activeScoopCount }} sabor{{ activeScoopCount > 1 ? 'es' : '' }} y el envase.
+        <p v-else-if="containerGroup" class="text-sm text-slate-500">
+          Elige el envase.
         </p>
-
-        <div v-if="flavorGroup" class="space-y-3">
-          <h4 class="font-medium text-sm">{{ flavorGroup.name }}</h4>
-          <div v-for="(_, idx) in activeScoopCount" :key="idx" class="space-y-1">
-            <p class="text-xs text-slate-500">Bola {{ idx + 1 }}</p>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="opt in flavorGroup.options"
-                :key="`${idx}-${opt.id}`"
-                type="button"
-                :disabled="!canSelectFlavor(idx, opt)"
-                :title="canSelectFlavor(idx, opt) ? opt.name : `${opt.name} — sin stock`"
-                class="px-3 py-2 rounded-lg border text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :class="flavorSelections[idx] === opt.id
-                  ? 'bg-primary-600 text-white border-primary-600'
-                  : canSelectFlavor(idx, opt)
-                    ? 'bg-white border-slate-200 hover:border-primary-400'
-                    : 'bg-slate-50 border-slate-100 text-slate-400'"
-                @click="selectFlavor(idx, opt)"
-              >
-                {{ opt.name }}
-                <span
-                  v-if="!canSelectFlavor(idx, opt)"
-                  class="block text-[10px] font-normal text-red-400"
-                >
-                  Sin stock
-                </span>
-                <span
-                  v-else-if="optionAvailableUnits(opt) <= 3"
-                  class="block text-[10px] font-normal text-slate-400"
-                >
-                  {{ optionAvailableUnits(opt) }} disp.
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
 
         <div v-if="containerGroup" class="space-y-2">
           <h4 class="font-medium text-sm">{{ containerGroup.name }}</h4>
-          <p class="text-xs text-slate-500">Solo se muestran envases con stock disponible.</p>
           <div class="flex flex-wrap gap-2">
             <button
               v-for="opt in containerGroup.options"
@@ -332,6 +251,7 @@ function confirm() {
             >
               {{ opt.name }}
               <span
+                v-if="containerStockLabel(opt)"
                 class="block text-[10px] font-normal"
                 :class="containerSelection === opt.id ? 'text-primary-100' : canSelectContainer(opt) ? 'text-slate-400' : 'text-red-400'"
               >

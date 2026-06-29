@@ -3,13 +3,22 @@ import { ref, computed } from 'vue'
 import type { CartItem, Product } from '@/types'
 import { calculateItemUnitPrice } from '@/utils/product-options'
 
-function buildCartKey(productId: number, selectedOptionIds?: number[]): string {
+function buildCartKey(
+  productId: number,
+  selectedOptionIds?: number[],
+  portionScoopCount?: number,
+): string {
   const opts = (selectedOptionIds ?? []).slice().sort((a, b) => a - b).join(',')
-  return opts ? `${productId}:${opts}` : String(productId)
+  const scoop = portionScoopCount ? `:s${portionScoopCount}` : ''
+  return opts ? `${productId}:${opts}${scoop}` : `${productId}${scoop}`
 }
 
 function itemUnitPrice(item: CartItem): number {
-  return item.unitPrice ?? calculateItemUnitPrice(item.product, item.selectedOptionIds)
+  return item.unitPrice ?? calculateItemUnitPrice(
+    item.product,
+    item.selectedOptionIds,
+    item.portionScoopCount,
+  )
 }
 
 export const useCartStore = defineStore('cart', () => {
@@ -35,10 +44,11 @@ export const useCartStore = defineStore('cart', () => {
     selectedOptionIds?: number[],
     optionLabel?: string,
     unitPrice?: number,
+    portionScoopCount?: number,
   ) {
-    const cartKey = buildCartKey(product.id, selectedOptionIds)
+    const cartKey = buildCartKey(product.id, selectedOptionIds, portionScoopCount)
     const max = maxQty(product)
-    const price = unitPrice ?? calculateItemUnitPrice(product, selectedOptionIds)
+    const price = unitPrice ?? calculateItemUnitPrice(product, selectedOptionIds, portionScoopCount)
     const existing = items.value.find((i) => i.cartKey === cartKey)
     if (existing) {
       if (existing.quantity < max) existing.quantity++
@@ -49,6 +59,7 @@ export const useCartStore = defineStore('cart', () => {
         selectedOptionIds,
         optionLabel,
         unitPrice: price,
+        portionScoopCount,
         cartKey,
       })
     }

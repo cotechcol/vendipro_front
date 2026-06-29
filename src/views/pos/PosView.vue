@@ -70,6 +70,7 @@ async function checkout() {
         productId: i.product.id,
         quantity: i.quantity,
         selectedOptionIds: i.selectedOptionIds,
+        portionScoopCount: i.portionScoopCount,
       })),
       customerId: cart.customerId || undefined,
       paymentMethod: cart.paymentMethod,
@@ -99,8 +100,8 @@ function optionsHint(p: Product): string {
   const hasIceCream = p.optionGroups?.some((g) => g.kind === 'flavor' || g.kind === 'container')
   if (hasAddons && p.productType === 'simple') return 'Toca para elegir adicionales'
   if (hasAddons) return 'Toca para elegir adicionales'
-  if (p.variableScoops) return 'Toca para elegir bolas, sabor y envase'
-  if (hasIceCream || (p.productType === 'portion' && p.scoopCount)) return 'Toca para elegir sabor y envase'
+  if (p.variableScoops) return 'Toca para elegir bolas y envase'
+  if (hasIceCream || (p.productType === 'portion' && p.scoopCount)) return 'Toca para elegir envase'
   return 'Toca para opciones'
 }
 
@@ -162,7 +163,7 @@ async function handleProductClick(p: Product) {
   if (product.productType === 'portion' && product.scoopCount) {
     toast.value = {
       show: true,
-      message: 'Este helado no tiene sabores configurados. Configúralo en Productos → editar → "Con sabores y envase".',
+      message: 'Este producto no tiene envases configurados. Configúralo en Productos → editar → "Con envase en POS".',
       type: 'error',
     }
     return
@@ -171,9 +172,14 @@ async function handleProductClick(p: Product) {
   cart.addProduct(product)
 }
 
-function onOptionsConfirm(selectedOptionIds: number[], label: string, unitPrice: number) {
+function onOptionsConfirm(
+  selectedOptionIds: number[],
+  label: string,
+  unitPrice: number,
+  portionScoopCount?: number,
+) {
   if (optionsProduct.value) {
-    cart.addProduct(optionsProduct.value, selectedOptionIds, label, unitPrice)
+    cart.addProduct(optionsProduct.value, selectedOptionIds, label, unitPrice, portionScoopCount)
   }
   showOptions.value = false
   optionsProduct.value = null
