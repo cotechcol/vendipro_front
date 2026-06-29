@@ -8,12 +8,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import type { Product, Category, ProductType, StockUnit, ProductRecipe } from '@/types'
 import { formatMoney, formatStock, productTypeLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
 
-type OptionRow = {
-  name: string
-  ingredientProductId: number
-  unitCost: number
-  costManual: boolean
-}
+type NameRow = { name: string }
 
 type AddonRow = {
   name: string
@@ -54,11 +49,11 @@ const form = ref({
   variableScoops: false,
   scoopPrices: [0, 0, 0] as number[],
   useOptions: false,
-  flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }] as OptionRow[],
+  flavorOptions: [{ name: '' }] as NameRow[],
   containerOptions: [
-    { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
-    { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
-  ] as OptionRow[],
+    { name: 'Galleta' },
+    { name: 'Vaso' },
+  ] as NameRow[],
   salePrice: 0,
   costPrice: 0,
   stock: 0,
@@ -68,10 +63,6 @@ const form = ref({
   recipe: [] as ProductRecipe[],
   addonOptions: [] as AddonRow[],
 })
-
-const simpleProducts = computed(() =>
-  products.value.filter((p) => p.productType === 'simple'),
-)
 
 const productTypeOptions: { value: ProductType; label: string }[] = [
   { value: 'simple', label: 'Unidad' },
@@ -120,14 +111,15 @@ const addonIngredientOptions = computed(() =>
 )
 
 function validateFlavorOptions(): string | null {
-  const incomplete = form.value.flavorOptions.filter(
-    (o) => !o.name.trim() && o.ingredientProductId,
-  )
-  if (incomplete.length) {
-    return 'Si vinculas un insumo al sabor, indica el nombre.'
-  }
   if (!form.value.flavorOptions.some((o) => o.name.trim())) {
     return 'Agrega al menos un sabor con nombre.'
+  }
+  return null
+}
+
+function validateContainerOptions(): string | null {
+  if (!form.value.containerOptions.some((o) => o.name.trim())) {
+    return 'Agrega al menos un envase con nombre (ej. Galleta o Vaso).'
   }
   return null
 }
@@ -135,16 +127,13 @@ function validateFlavorOptions(): string | null {
 function mapFlavorOptionsForSave() {
   return form.value.flavorOptions
     .filter((o) => o.name.trim())
-    .map((o) => {
-      const option: Record<string, unknown> = {
-        name: o.name.trim(),
-        unitCost: Number(o.unitCost) || 0,
-      }
-      if (o.ingredientProductId) {
-        option.ingredientProductId = Number(o.ingredientProductId)
-      }
-      return option
-    })
+    .map((o) => ({ name: o.name.trim() }))
+}
+
+function mapContainerOptionsForSave() {
+  return form.value.containerOptions
+    .filter((o) => o.name.trim())
+    .map((o) => ({ name: o.name.trim() }))
 }
 
 function validateAddonOptions(): string | null {
@@ -177,85 +166,10 @@ function buildAddonOptionGroups() {
   }]
 }
 
-function flavorCostFromBulk(bulkId: number): number {
-  const bulk = bulkProducts.value.find((b) => b.id === bulkId)
-  if (!bulk) return 0
-  return Number((Number(bulk.costPrice) * Number(form.value.portionSize)).toFixed(2))
-}
-
-function containerCostFromProduct(productId: number): number {
-  const p = simpleProducts.value.find((s) => s.id === productId)
-  return p ? Number(p.costPrice) : 0
-}
-
 function addonCostFromProduct(productId: number): number {
   const p = products.value.find((x) => x.id === productId)
   return p ? Number(p.costPrice) : 0
 }
-
-function onFlavorIngredientChange(idx: number) {
-  const row = form.value.flavorOptions[idx]
-  row.ingredientProductId = Number(row.ingredientProductId) || 0
-  if (row.ingredientProductId && !row.costManual) {
-    row.unitCost = flavorCostFromBulk(row.ingredientProductId)
-  }
-}
-
-function setFlavorCost(idx: number, raw: string) {
-  const row = form.value.flavorOptions[idx]
-  row.unitCost = parseDecimalInput(raw)
-  row.costManual = true
-}
-
-function onContainerIngredientChange(idx: number) {
-  const row = form.value.containerOptions[idx]
-  if (row.ingredientProductId) {
-    row.unitCost = containerCostFromProduct(row.ingredientProductId)
-    row.costManual = false
-  }
-}
-
-function setContainerCost(idx: number, raw: string) {
-  const row = form.value.containerOptions[idx]
-  row.unitCost = parseDecimalInput(raw)
-  row.costManual = true
-}
-
-const portionCostBreakdown = computed(() => {
-  if (!form.value.useOptions || form.value.productType !== 'portion') return null
-
-  const flavorCosts = form.value.flavorOptions
-    .map((f) => Number(f.unitCost) || 0)
-    .filter((n) => n > 0)
-  const containerCosts = form.value.containerOptions
-    .map((c) => Number(c.unitCost) || 0)
-    .filter((n) => n > 0)
-
-  if (!flavorCosts.length) return null
-
-  const scoops = form.value.scoopCount
-  const avgFlavor = flavorCosts.reduce((a, b) => a + b, 0) / flavorCosts.length
-  const minFlavor = Math.min(...flavorCosts)
-  const maxFlavor = Math.max(...flavorCosts)
-  const scoopsCost = Number((avgFlavor * scoops).toFixed(2))
-  const minScoops = Number((minFlavor * scoops).toFixed(2))
-  const maxScoops = Number((maxFlavor * scoops).toFixed(2))
-
-  const avgContainer = containerCosts.length
-    ? containerCosts.reduce((a, b) => a + b, 0) / containerCosts.length
-    : 0
-  const minContainer = containerCosts.length ? Math.min(...containerCosts) : 0
-  const maxContainer = containerCosts.length ? Math.max(...containerCosts) : 0
-
-  return {
-    scoops,
-    scoopsCost,
-    avgContainer: Number(avgContainer.toFixed(2)),
-    referenceTotal: Number((scoopsCost + avgContainer).toFixed(2)),
-    minTotal: Number((minScoops + minContainer).toFixed(2)),
-    maxTotal: Number((maxScoops + maxContainer).toFixed(2)),
-  }
-})
 
 function stockDisplay(p: Product): string {
   if (p.productType === 'bulk') return formatStock(p.stock, p.stockUnit)
@@ -349,11 +263,8 @@ function resetForm() {
     baseProductId: undefined, portionSize: 90,
     scoopCount: 3, variableScoops: false, scoopPrices: [0, 0, 0],
     useOptions: false,
-    flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }],
-    containerOptions: [
-      { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
-      { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
-    ],
+    flavorOptions: [{ name: '' }],
+    containerOptions: [{ name: 'Galleta' }, { name: 'Vaso' }],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
     categoryId: undefined, visibleInPos: true, recipe: [], addonOptions: [],
   }
@@ -403,20 +314,10 @@ async function openEdit(p: Product) {
       ? [...product.scoopPrices, 0, 0, 0].slice(0, 3)
       : [Number(product.salePrice), Number(product.salePrice), Number(product.salePrice)],
     useOptions: hasOptions,
-    flavorOptions: flavorGroup?.options.map((o) => ({
-      name: o.name,
-      ingredientProductId: o.ingredientProductId ?? 0,
-      unitCost: Number(o.unitCost) || (o.ingredientProductId ? flavorCostFromBulk(o.ingredientProductId) : 0),
-      costManual: Number(o.unitCost) > 0,
-    })) ?? [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }],
-    containerOptions: containerGroup?.options.map((o) => ({
-      name: o.name,
-      ingredientProductId: o.ingredientProductId,
-      unitCost: Number(o.unitCost) || containerCostFromProduct(o.ingredientProductId),
-      costManual: Number(o.unitCost) > 0,
-    })) ?? [
-      { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
-      { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
+    flavorOptions: flavorGroup?.options.map((o) => ({ name: o.name })) ?? [{ name: '' }],
+    containerOptions: containerGroup?.options.map((o) => ({ name: o.name })) ?? [
+      { name: 'Galleta' },
+      { name: 'Vaso' },
     ],
     salePrice: Number(product.salePrice),
     costPrice: Number(product.costPrice),
@@ -444,24 +345,24 @@ async function openEdit(p: Product) {
 }
 
 function addFlavorOption() {
-  form.value.flavorOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
+  form.value.flavorOptions.push({ name: '' })
 }
 
 function removeFlavorOption(idx: number) {
   form.value.flavorOptions.splice(idx, 1)
   if (form.value.flavorOptions.length === 0) {
-    form.value.flavorOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
+    form.value.flavorOptions.push({ name: '' })
   }
 }
 
 function addContainerOption() {
-  form.value.containerOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
+  form.value.containerOptions.push({ name: '' })
 }
 
 function removeContainerOption(idx: number) {
   form.value.containerOptions.splice(idx, 1)
   if (form.value.containerOptions.length === 0) {
-    form.value.containerOptions.push({ name: '', ingredientProductId: 0, unitCost: 0, costManual: false })
+    form.value.containerOptions.push({ name: '' })
   }
 }
 
@@ -520,23 +421,6 @@ watch(() => form.value.productType, (type) => {
   if (type === 'simple' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
 })
 
-watch(() => [form.value.portionSize, form.value.stockUnit] as const, () => {
-  if (!form.value.useOptions) return
-  form.value.flavorOptions.forEach((row, idx) => {
-    if (row.ingredientProductId && !row.costManual) onFlavorIngredientChange(idx)
-  })
-})
-
-watch(
-  portionCostBreakdown,
-  (b) => {
-    if (form.value.useOptions && form.value.productType === 'portion' && b) {
-      form.value.costPrice = b.referenceTotal
-    }
-  },
-  { deep: true },
-)
-
 async function save() {
   try {
     if (form.value.productType === 'simple' || form.value.productType === 'composite') {
@@ -550,6 +434,11 @@ async function save() {
       const flavorError = validateFlavorOptions()
       if (flavorError) {
         toast.value = { show: true, message: flavorError, type: 'error' }
+        return
+      }
+      const containerError = validateContainerOptions()
+      if (containerError) {
+        toast.value = { show: true, message: containerError, type: 'error' }
         return
       }
     }
@@ -590,13 +479,7 @@ async function save() {
           {
             name: 'Envase',
             kind: 'container',
-            options: form.value.containerOptions
-              .filter((o) => o.name && o.ingredientProductId)
-              .map((o) => ({
-                name: o.name,
-                ingredientProductId: o.ingredientProductId,
-                unitCost: Number(o.unitCost) || 0,
-              })),
+            options: mapContainerOptionsForSave(),
           },
         ]
       } else {
@@ -916,44 +799,16 @@ onMounted(load)
                   <label class="text-sm font-medium">Sabores disponibles</label>
                   <button type="button" class="text-sm text-brand-600 hover:underline" @click="addFlavorOption">+ Sabor</button>
                 </div>
-                <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
-                  <div class="col-span-4">Nombre</div>
-                  <div class="col-span-5">Insumo (opcional)</div>
-                  <div class="col-span-2">Costo/bola</div>
-                </div>
                 <p class="text-xs text-slate-500">
-                  Puedes dejar el insumo vacío y poner el costo manualmente (ej. sabores sin control de inventario).
+                  Solo el nombre del sabor. El cliente lo elige en caja; el precio lo define el producto (1, 2 o 3 bolas).
                 </p>
-                <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
-                  <div class="col-span-4">
-                    <input v-model="flavor.name" placeholder="Nombre (Fresa…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
-                  </div>
-                  <div class="col-span-5">
-                    <select
-                      v-model.number="flavor.ingredientProductId"
-                      class="w-full px-3 py-2 border rounded-lg text-sm"
-                      @change="onFlavorIngredientChange(idx)"
-                    >
-                      <option :value="0">Sin vínculo (solo costo manual)</option>
-                      <option v-for="b in bulkProducts" :key="b.id" :value="b.id">
-                        {{ b.name }} ({{ formatStock(b.stock, b.stockUnit) }})
-                      </option>
-                    </select>
-                  </div>
-                  <div class="col-span-2">
-                    <input
-                      type="text"
-                      inputmode="decimal"
-                      :value="formatCostInput(flavor.unitCost)"
-                      placeholder="0"
-                      title="Costo por bola — editable"
-                      class="w-full px-2 py-2 border rounded-lg text-sm"
-                      @input="setFlavorCost(idx, ($event.target as HTMLInputElement).value)"
-                    />
-                  </div>
-                  <div class="col-span-1">
-                    <button type="button" class="text-red-500 text-sm" @click="removeFlavorOption(idx)">✕</button>
-                  </div>
+                <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="flex gap-2 items-center">
+                  <input
+                    v-model="flavor.name"
+                    placeholder="Fresa, Coco, Ron con pasas…"
+                    class="flex-1 px-3 py-2 border rounded-lg text-sm"
+                  />
+                  <button type="button" class="text-red-500 text-sm shrink-0 px-2" @click="removeFlavorOption(idx)">✕</button>
                 </div>
               </div>
 
@@ -962,56 +817,15 @@ onMounted(load)
                   <label class="text-sm font-medium">Envases (no cambian el precio)</label>
                   <button type="button" class="text-sm text-brand-600 hover:underline" @click="addContainerOption">+ Envase</button>
                 </div>
-                <div v-for="(container, idx) in form.containerOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
-                  <div class="col-span-4">
-                    <input v-model="container.name" placeholder="Nombre (Cono, vaso…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
-                  </div>
-                  <div class="col-span-5">
-                    <select
-                      v-model="container.ingredientProductId"
-                      class="w-full px-3 py-2 border rounded-lg text-sm"
-                      @change="onContainerIngredientChange(idx)"
-                    >
-                      <option :value="0">Producto en unidades…</option>
-                      <option v-for="s in simpleProducts" :key="s.id" :value="s.id">
-                        {{ s.name }} ({{ formatStock(s.stock, s.stockUnit) }})
-                      </option>
-                    </select>
-                  </div>
-                  <div class="col-span-2">
-                    <input
-                      type="text"
-                      inputmode="decimal"
-                      :value="formatCostInput(container.unitCost)"
-                      placeholder="0"
-                      title="Costo del envase — editable"
-                      class="w-full px-2 py-2 border rounded-lg text-sm"
-                      @input="setContainerCost(idx, ($event.target as HTMLInputElement).value)"
-                    />
-                  </div>
-                  <div class="col-span-1">
-                    <button type="button" class="text-red-500 text-sm" @click="removeContainerOption(idx)">✕</button>
-                  </div>
+                <p class="text-xs text-slate-500">Solo el nombre (ej. Galleta, Vaso, Cono).</p>
+                <div v-for="(container, idx) in form.containerOptions" :key="idx" class="flex gap-2 items-center">
+                  <input
+                    v-model="container.name"
+                    placeholder="Galleta, Vaso, Cono…"
+                    class="flex-1 px-3 py-2 border rounded-lg text-sm"
+                  />
+                  <button type="button" class="text-red-500 text-sm shrink-0 px-2" @click="removeContainerOption(idx)">✕</button>
                 </div>
-              </div>
-
-              <div v-if="portionCostBreakdown" class="sm:col-span-2 p-4 bg-white border border-blue-200 rounded-xl space-y-1 text-sm">
-                <p class="font-medium text-slate-700">Costo de fabricación (referencia)</p>
-                <p class="text-slate-600">
-                  {{ portionCostBreakdown.scoops }} bola(s) (prom. sabores):
-                  <span class="font-medium">{{ formatMoney(portionCostBreakdown.scoopsCost) }}</span>
-                </p>
-                <p class="text-slate-600">
-                  Envase (promedio):
-                  <span class="font-medium">{{ formatMoney(portionCostBreakdown.avgContainer) }}</span>
-                </p>
-                <p class="text-base font-semibold text-slate-900 pt-1 border-t border-slate-100">
-                  Total estimado: {{ formatMoney(portionCostBreakdown.referenceTotal) }}
-                </p>
-                <p class="text-xs text-slate-500">
-                  Rango según sabores y envase elegidos:
-                  {{ formatMoney(portionCostBreakdown.minTotal) }} – {{ formatMoney(portionCostBreakdown.maxTotal) }}
-                </p>
               </div>
             </template>
 
@@ -1056,12 +870,7 @@ onMounted(load)
                 step="0.01"
                 min="0"
                 class="w-full mt-1 px-3 py-2 border rounded-lg"
-                :readonly="form.useOptions"
-                :class="form.useOptions ? 'bg-slate-50 text-slate-700' : ''"
               />
-              <p v-if="form.useOptions" class="text-xs text-slate-500 mt-1">
-                Se calcula automáticamente según sabores y envases.
-              </p>
             </div>
           </div>
         </template>

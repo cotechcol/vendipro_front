@@ -10,6 +10,7 @@ function optionQty(opt: ProductOption): number {
 
 /** Unidades vendibles de esta opción con el stock actual del insumo */
 export function optionAvailableUnits(opt: ProductOption): number {
+  if (!opt.ingredientProductId) return 9999
   const qty = optionQty(opt)
   if (qty <= 0) return 0
   return Math.floor(ingredientStock(opt) / qty)
@@ -17,6 +18,7 @@ export function optionAvailableUnits(opt: ProductOption): number {
 
 /** ¿Hay stock para usar esta opción al menos una vez? */
 export function optionHasStock(opt: ProductOption): boolean {
+  if (!opt.ingredientProductId) return true
   return optionAvailableUnits(opt) > 0
 }
 
@@ -29,6 +31,7 @@ export function canSelectFlavorOption(
   scoopIndex: number,
   flavorSelections: number[],
 ): boolean {
+  if (!opt.ingredientProductId) return true
   const qty = optionQty(opt)
   if (qty <= 0) return false
 

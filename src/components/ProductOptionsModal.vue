@@ -82,6 +82,7 @@ function canSelectAddon(opt: ProductOption): boolean {
 }
 
 function containerStockLabel(opt: ProductOption): string {
+  if (!opt.ingredientProductId) return ''
   const units = optionAvailableUnits(opt)
   if (units <= 0) return 'Sin stock'
   const ing = opt.ingredient
