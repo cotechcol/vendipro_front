@@ -23,8 +23,12 @@ const emit = defineEmits<{
 const flavorSelections = ref<number[]>([])
 const containerSelection = ref<number | null>(null)
 const addonSelections = ref<number[]>([])
+const selectedScoopCount = ref(1)
 
 const isComposite = computed(() => props.product?.productType === 'composite')
+const isSimple = computed(() => props.product?.productType === 'simple')
+const isPortion = computed(() => props.product?.productType === 'portion')
+const isAddonOnly = computed(() => isComposite.value || isSimple.value)
 
 const flavorGroup = computed(() =>
   props.product?.optionGroups?.find((g) => g.kind === 'flavor'),
@@ -38,13 +42,30 @@ const addonGroup = computed(() =>
   props.product?.optionGroups?.find((g) => g.kind === 'addon'),
 )
 
-const scoopCount = computed(() => props.product?.scoopCount ?? 1)
+const maxScoopCount = computed(() => props.product?.scoopCount ?? 1)
+const variableScoops = computed(() => props.product?.variableScoops ?? false)
+
+const activeScoopCount = computed(() =>
+  variableScoops.value ? selectedScoopCount.value : maxScoopCount.value,
+)
+
+const scoopPriceOptions = computed(() => {
+  if (!variableScoops.value || !props.product?.scoopPrices?.length) return []
+  return props.product.scoopPrices.slice(0, maxScoopCount.value).map((price, idx) => ({
+    count: idx + 1,
+    price: Number(price),
+  }))
+})
 
 const unitPrice = computed(() => {
   if (!props.product) return 0
-  const ids = isComposite.value
-    ? addonSelections.value
-    : [...flavorSelections.value.filter(Boolean), ...(containerSelection.value ? [containerSelection.value] : [])]
+  if (isAddonOnly.value) {
+    return calculateItemUnitPrice(props.product, addonSelections.value)
+  }
+  const ids = [
+    ...flavorSelections.value.filter(Boolean),
+    ...(containerSelection.value ? [containerSelection.value] : []),
+  ]
   return calculateItemUnitPrice(props.product, ids)
 })
 
@@ -85,8 +106,14 @@ function toggleAddon(opt: ProductOption) {
   }
 }
 
+function selectScoopCount(count: number) {
+  selectedScoopCount.value = count
+  flavorSelections.value = Array(count).fill(0)
+  containerSelection.value = null
+}
+
 const canConfirm = computed(() => {
-  if (isComposite.value) {
+  if (isAddonOnly.value) {
     for (const id of addonSelections.value) {
       const opt = addonGroup.value?.options.find((o) => o.id === id)
       if (!opt || !canSelectAddon(opt)) return false
@@ -94,10 +121,11 @@ const canConfirm = computed(() => {
     return true
   }
 
-  if (flavorSelections.value.filter(Boolean).length !== scoopCount.value) return false
+  const scoops = activeScoopCount.value
+  if (flavorSelections.value.filter(Boolean).length !== scoops) return false
   if (containerSelection.value == null) return false
 
-  for (let i = 0; i < scoopCount.value; i++) {
+  for (let i = 0; i < scoops; i++) {
     const id = flavorSelections.value[i]
     const opt = flavorGroup.value?.options.find((o) => o.id === id)
     if (!id || !opt || !canSelectFlavor(i, opt)) return false
@@ -108,13 +136,20 @@ const canConfirm = computed(() => {
 })
 
 function reset() {
-  flavorSelections.value = Array(scoopCount.value).fill(0)
+  selectedScoopCount.value = 1
+  flavorSelections.value = Array(activeScoopCount.value).fill(0)
   containerSelection.value = null
   addonSelections.value = []
 }
 
 watch(() => props.show, (visible) => {
   if (visible) reset()
+})
+
+watch(activeScoopCount, (count) => {
+  if (isPortion.value && !isAddonOnly.value) {
+    flavorSelections.value = Array(count).fill(0)
+  }
 })
 
 watch(flavorSelections, () => {
@@ -131,7 +166,7 @@ function selectFlavor(scoopIndex: number, opt: ProductOption) {
 function buildLabel(): string {
   const labels: string[] = []
 
-  if (isComposite.value && addonGroup.value) {
+  if (isAddonOnly.value && addonGroup.value) {
     const addonNames = addonSelections.value
       .map((id) => addonGroup.value?.options.find((o) => o.id === id)?.name)
       .filter(Boolean)
@@ -141,6 +176,10 @@ function buildLabel(): string {
 
   const fg = flavorGroup.value
   const cg = containerGroup.value
+
+  if (variableScoops.value) {
+    labels.push(`${activeScoopCount.value} bola${activeScoopCount.value > 1 ? 's' : ''}`)
+  }
 
   if (fg) {
     const flavorNames = flavorSelections.value
@@ -159,7 +198,7 @@ function buildLabel(): string {
 
 function confirm() {
   if (!canConfirm.value || !props.product) return
-  const ids = isComposite.value
+  const ids = isAddonOnly.value
     ? [...addonSelections.value]
     : [...flavorSelections.value.filter(Boolean), containerSelection.value!]
   emit('confirm', ids, buildLabel(), unitPrice.value)
@@ -174,7 +213,7 @@ function confirm() {
     @close="emit('close')"
   >
     <div v-if="product" class="space-y-5">
-      <template v-if="isComposite && addonGroup">
+      <template v-if="isAddonOnly && addonGroup">
         <p class="text-sm text-slate-500">
           Precio base: {{ formatMoney(Number(product.salePrice)) }}.
           Elige adicionales si el cliente los quiere.
@@ -210,13 +249,34 @@ function confirm() {
       </template>
 
       <template v-else>
-        <p class="text-sm text-slate-500">
-          Elige {{ scoopCount }} sabor{{ scoopCount > 1 ? 'es' : '' }} y el envase. El precio no cambia.
+        <div v-if="variableScoops && scoopPriceOptions.length" class="space-y-2">
+          <h4 class="font-medium text-sm">¿Cuántas bolas?</h4>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="opt in scoopPriceOptions"
+              :key="opt.count"
+              type="button"
+              class="px-4 py-2 rounded-lg border text-sm transition-colors"
+              :class="selectedScoopCount === opt.count
+                ? 'bg-primary-600 text-white border-primary-600'
+                : 'bg-white border-slate-200 hover:border-primary-400'"
+              @click="selectScoopCount(opt.count)"
+            >
+              {{ opt.count }} bola{{ opt.count > 1 ? 's' : '' }}
+              <span class="block text-[10px] font-normal" :class="selectedScoopCount === opt.count ? 'text-primary-100' : 'text-slate-500'">
+                {{ formatMoney(opt.price) }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <p v-else class="text-sm text-slate-500">
+          Elige {{ activeScoopCount }} sabor{{ activeScoopCount > 1 ? 'es' : '' }} y el envase.
         </p>
 
         <div v-if="flavorGroup" class="space-y-3">
           <h4 class="font-medium text-sm">{{ flavorGroup.name }}</h4>
-          <div v-for="(_, idx) in scoopCount" :key="idx" class="space-y-1">
+          <div v-for="(_, idx) in activeScoopCount" :key="idx" class="space-y-1">
             <p class="text-xs text-slate-500">Bola {{ idx + 1 }}</p>
             <div class="flex flex-wrap gap-2">
               <button
@@ -279,6 +339,10 @@ function confirm() {
             </button>
           </div>
         </div>
+
+        <p v-if="variableScoops" class="text-base font-semibold text-slate-900 pt-2 border-t">
+          Total: {{ formatMoney(unitPrice) }}
+        </p>
       </template>
     </div>
 

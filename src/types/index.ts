@@ -72,6 +72,8 @@ export interface Product {
   baseProduct?: Product | null
   portionSize?: number | null
   scoopCount?: number | null
+  variableScoops?: boolean
+  scoopPrices?: number[] | null
   optionGroups?: ProductOptionGroup[]
   recipe?: ProductRecipe[]
   salePrice: number

@@ -97,7 +97,9 @@ function printTicket() {
 function optionsHint(p: Product): string {
   const hasAddons = p.optionGroups?.some((g) => g.kind === 'addon')
   const hasIceCream = p.optionGroups?.some((g) => g.kind === 'flavor' || g.kind === 'container')
+  if (hasAddons && p.productType === 'simple') return 'Toca para elegir adicionales'
   if (hasAddons) return 'Toca para elegir adicionales'
+  if (p.variableScoops) return 'Toca para elegir bolas, sabor y envase'
   if (hasIceCream || p.scoopCount) return 'Toca para elegir sabor y envase'
   return 'Toca para opciones'
 }
@@ -106,8 +108,17 @@ function hasConfigurableOptions(p: Product): boolean {
   return (p.optionGroups?.length ?? 0) > 0 || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
 }
 
-function showFromPrice(p: Product): boolean {
-  return (p.optionGroups?.some((g) => g.kind === 'addon') ?? false)
+function displayPrice(p: Product): string {
+  if (p.variableScoops && p.scoopPrices?.length) {
+    const min = Math.min(...p.scoopPrices.map(Number))
+    const max = Math.max(...p.scoopPrices.map(Number))
+    if (min === max) return formatMoney(min)
+    return `${formatMoney(min)} – ${formatMoney(max)}`
+  }
+  if (p.optionGroups?.some((g) => g.kind === 'addon')) {
+    return `Desde ${formatMoney(Number(p.salePrice))}`
+  }
+  return formatMoney(Number(p.salePrice))
 }
 
 function sellableCount(p: Product): number {
@@ -237,7 +248,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             </p>
             <div class="flex justify-between items-end mt-2">
               <span class="text-primary-600 font-bold">
-                {{ showFromPrice(p) ? `Desde ${formatMoney(Number(p.salePrice))}` : formatMoney(Number(p.salePrice)) }}
+                {{ displayPrice(p) }}
               </span>
               <span class="text-xs" :class="isAvailable(p) ? 'text-slate-400' : 'text-red-400'">
                 {{ sellableCount(p) }} disp.

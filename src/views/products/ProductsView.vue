@@ -50,7 +50,9 @@ const form = ref({
   stockUnit: 'unit' as StockUnit,
   baseProductId: undefined as number | undefined,
   portionSize: 90,
-  scoopCount: 1,
+  scoopCount: 3,
+  variableScoops: false,
+  scoopPrices: [0, 0, 0] as number[],
   useOptions: false,
   flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }] as OptionRow[],
   containerOptions: [
@@ -279,7 +281,8 @@ function resetForm() {
     sku: '', name: '', description: '',
     productType: 'simple', stockUnit: 'unit',
     baseProductId: undefined, portionSize: 90,
-    scoopCount: 1, useOptions: false,
+    scoopCount: 3, variableScoops: false, scoopPrices: [0, 0, 0],
+    useOptions: false,
     flavorOptions: [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }],
     containerOptions: [
       { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
@@ -316,7 +319,11 @@ function openEdit(p: Product) {
       : p.stockUnit,
     baseProductId: p.baseProductId ?? undefined,
     portionSize: Number(p.portionSize) || 90,
-    scoopCount: Number(p.scoopCount) || 1,
+    scoopCount: Number(p.scoopCount) || 3,
+    variableScoops: p.variableScoops ?? false,
+    scoopPrices: p.scoopPrices?.length
+      ? [...p.scoopPrices, 0, 0, 0].slice(0, 3)
+      : [Number(p.salePrice), Number(p.salePrice), Number(p.salePrice)],
     useOptions: hasOptions,
     flavorOptions: flavorGroup?.options.map((o) => ({
       name: o.name,
@@ -421,10 +428,14 @@ watch(() => form.value.productType, (type) => {
       form.value.stockUnit = 'g'
     }
     if (!form.value.portionSize) form.value.portionSize = 90
-    if (!editing.value) form.value.useOptions = true
+    if (!editing.value) {
+      form.value.useOptions = true
+      form.value.variableScoops = true
+    }
   }
   if (type === 'composite' && form.value.recipe.length === 0) addRecipeLine()
   if (type === 'composite' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
+  if (type === 'simple' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
 })
 
 watch(() => [form.value.portionSize, form.value.stockUnit] as const, () => {
@@ -462,6 +473,17 @@ async function save() {
       if (form.value.useOptions) {
         delete payload.baseProductId
         payload.scoopCount = form.value.scoopCount
+        payload.variableScoops = form.value.variableScoops
+        if (form.value.variableScoops) {
+          const prices = form.value.scoopPrices
+            .slice(0, form.value.scoopCount)
+            .map((p) => Number(p) || 0)
+          payload.scoopPrices = prices
+          payload.salePrice = prices[0] ?? form.value.salePrice
+        } else {
+          payload.variableScoops = false
+          delete payload.scoopPrices
+        }
         payload.optionGroups = [
           {
             name: 'Sabor',
@@ -493,6 +515,7 @@ async function save() {
       delete payload.useOptions
       delete payload.flavorOptions
       delete payload.containerOptions
+      delete payload.addonOptions
     } else if (form.value.productType === 'composite') {
       delete payload.baseProductId
       delete payload.portionSize
@@ -518,7 +541,25 @@ async function save() {
       delete payload.baseProductId
       delete payload.portionSize
       delete payload.recipe
+      delete payload.variableScoops
+      delete payload.scoopPrices
       payload.stockUnit = 'unit'
+      const addons = form.value.addonOptions.filter((o) => o.name && o.ingredientProductId)
+      if (addons.length) {
+        payload.optionGroups = [{
+          name: 'Adicionales',
+          kind: 'addon',
+          options: addons.map((o) => ({
+            name: o.name,
+            ingredientProductId: o.ingredientProductId,
+            unitCost: Number(o.unitCost) || 0,
+            unitPrice: Number(o.unitPrice) || 0,
+          })),
+        }]
+      } else if (editing.value) {
+        payload.optionGroups = []
+      }
+      delete payload.addonOptions
     }
 
     if (editing.value) {
@@ -745,13 +786,45 @@ onMounted(load)
             </div>
 
             <template v-if="form.useOptions">
-              <div>
-                <label class="text-sm font-medium">Cantidad de bolas</label>
+              <div class="sm:col-span-2">
+                <label class="flex items-center gap-2 text-sm font-medium">
+                  <input v-model="form.variableScoops" type="checkbox" class="rounded" />
+                  Un solo producto en POS: el cliente elige 1, 2 o 3 bolas al vender
+                </label>
+              </div>
+
+              <div v-if="form.variableScoops">
+                <label class="text-sm font-medium">Máximo de bolas</label>
+                <select v-model.number="form.scoopCount" class="w-full mt-1 px-3 py-2 border rounded-lg">
+                  <option :value="1">Hasta 1 bola</option>
+                  <option :value="2">Hasta 2 bolas</option>
+                  <option :value="3">Hasta 3 bolas</option>
+                </select>
+              </div>
+              <div v-else>
+                <label class="text-sm font-medium">Cantidad fija de bolas</label>
                 <select v-model.number="form.scoopCount" class="w-full mt-1 px-3 py-2 border rounded-lg">
                   <option :value="1">1 bola</option>
                   <option :value="2">2 bolas</option>
                   <option :value="3">3 bolas</option>
                 </select>
+              </div>
+
+              <div v-if="form.variableScoops" class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div v-for="n in form.scoopCount" :key="n">
+                  <label class="text-sm font-medium">Precio {{ n }} bola{{ n > 1 ? 's' : '' }}</label>
+                  <input
+                    v-model.number="form.scoopPrices[n - 1]"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="w-full mt-1 px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+              <div v-else>
+                <label class="text-sm font-medium">Precio venta</label>
+                <input v-model.number="form.salePrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
               </div>
               <div>
                 <label class="text-sm font-medium">{{ portionSizeLabel }}</label>
@@ -1031,6 +1104,56 @@ onMounted(load)
             <div><label class="text-sm font-medium">Precio costo</label><input v-model.number="form.costPrice" type="number" step="0.01" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
             <div v-if="!editing"><label class="text-sm font-medium">Stock inicial</label><input v-model.number="form.stock" type="number" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
             <div><label class="text-sm font-medium">Stock mínimo</label><input v-model.number="form.minStock" type="number" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
+          </div>
+
+          <div class="mt-4 p-4 bg-slate-50 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <label class="text-sm font-medium">Adicionales (opcionales en POS)</label>
+              <button type="button" class="text-sm text-brand-600 hover:underline" @click="addAddonOption">+ Adicional</button>
+            </div>
+            <p class="text-xs text-slate-500">
+              Ej: bebida, papas extra. El precio base del producto no cambia si no los eligen.
+            </p>
+            <div v-for="(addon, idx) in form.addonOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
+              <div class="col-span-3">
+                <input v-model="addon.name" placeholder="Bebida, papas…" class="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div class="col-span-4">
+                <select
+                  v-model="addon.ingredientProductId"
+                  class="w-full px-3 py-2 border rounded-lg text-sm"
+                  @change="onAddonIngredientChange(idx)"
+                >
+                  <option :value="0">Producto…</option>
+                  <option v-for="ing in ingredientOptions" :key="ing.id" :value="ing.id">
+                    {{ ing.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="col-span-2">
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  :value="formatCostInput(addon.unitCost)"
+                  placeholder="0"
+                  class="w-full px-2 py-2 border rounded-lg text-sm"
+                  @input="setAddonCost(idx, ($event.target as HTMLInputElement).value)"
+                />
+              </div>
+              <div class="col-span-2">
+                <input
+                  v-model.number="addon.unitPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0"
+                  class="w-full px-2 py-2 border rounded-lg text-sm"
+                />
+              </div>
+              <div class="col-span-1">
+                <button type="button" class="text-red-500 text-sm" @click="removeAddonOption(idx)">✕</button>
+              </div>
+            </div>
           </div>
         </template>
 

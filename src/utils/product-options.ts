@@ -48,12 +48,47 @@ export function maxScoopsForFlavor(opt: ProductOption): number {
   return Math.floor(ingredientStock(opt) / qty)
 }
 
-/** Precio unitario de venta incluyendo adicionales seleccionados */
+function countSelectedByKind(
+  product: { optionGroups?: { kind: string; options: ProductOption[] }[] },
+  selectedOptionIds: number[] | undefined,
+  kind: string,
+): number {
+  if (!selectedOptionIds?.length || !product.optionGroups?.length) return 0
+  const ids = new Set<number>()
+  for (const group of product.optionGroups) {
+    if (group.kind !== kind) continue
+    for (const option of group.options ?? []) {
+      ids.add(option.id)
+    }
+  }
+  return selectedOptionIds.filter((id) => ids.has(id)).length
+}
+
+/** Precio unitario de venta incluyendo bolas variables y adicionales */
 export function calculateItemUnitPrice(
-  product: { salePrice: number; optionGroups?: { kind: string; options: ProductOption[] }[] },
+  product: {
+    productType?: string
+    salePrice: number
+    variableScoops?: boolean
+    scoopPrices?: number[] | null
+    optionGroups?: { kind: string; options: ProductOption[] }[]
+  },
   selectedOptionIds?: number[],
 ): number {
   let price = Number(product.salePrice)
+
+  if (
+    product.productType === 'portion'
+    && product.variableScoops
+    && product.scoopPrices?.length
+    && selectedOptionIds?.length
+  ) {
+    const flavorCount = countSelectedByKind(product, selectedOptionIds, 'flavor')
+    if (flavorCount > 0) {
+      price = Number(product.scoopPrices[flavorCount - 1] ?? product.salePrice)
+    }
+  }
+
   if (!selectedOptionIds?.length || !product.optionGroups?.length) return price
 
   const optionMap = new Map<number, ProductOption>()
@@ -73,4 +108,13 @@ export function calculateItemUnitPrice(
   }
 
   return Number(price.toFixed(2))
+}
+
+export function productHasConfigurableOptions(p: {
+  productType?: string
+  scoopCount?: number | null
+  optionGroups?: unknown[]
+}): boolean {
+  return (p.optionGroups?.length ?? 0) > 0
+    || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
 }
