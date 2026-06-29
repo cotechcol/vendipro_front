@@ -121,26 +121,31 @@ const addonIngredientOptions = computed(() =>
 
 function validateAddonOptions(): string | null {
   const incomplete = form.value.addonOptions.filter(
-    (o) => (o.name.trim() && !o.ingredientProductId) || (!o.name.trim() && o.ingredientProductId),
+    (o) => !o.name.trim() && o.ingredientProductId,
   )
   if (incomplete.length) {
-    return 'Cada adicional necesita nombre y producto/insumo vinculado.'
+    return 'Si vinculas un producto, el adicional necesita nombre.'
   }
   return null
 }
 
 function buildAddonOptionGroups() {
-  const addons = form.value.addonOptions.filter((o) => o.name.trim() && o.ingredientProductId)
+  const addons = form.value.addonOptions.filter((o) => o.name.trim())
   if (!addons.length) return []
   return [{
     name: 'Adicionales',
     kind: 'addon',
-    options: addons.map((o) => ({
-      name: o.name.trim(),
-      ingredientProductId: Number(o.ingredientProductId),
-      unitCost: Number(o.unitCost) || 0,
-      unitPrice: Number(o.unitPrice) || 0,
-    })),
+    options: addons.map((o) => {
+      const option: Record<string, unknown> = {
+        name: o.name.trim(),
+        unitCost: Number(o.unitCost) || 0,
+        unitPrice: Number(o.unitPrice) || 0,
+      }
+      if (o.ingredientProductId) {
+        option.ingredientProductId = Number(o.ingredientProductId)
+      }
+      return option
+    }),
   }]
 }
 
@@ -398,8 +403,8 @@ async function openEdit(p: Product) {
     })),
     addonOptions: addonGroup?.options.map((o) => ({
       name: o.name,
-      ingredientProductId: o.ingredientProductId,
-      unitCost: Number(o.unitCost) || addonCostFromProduct(o.ingredientProductId),
+      ingredientProductId: o.ingredientProductId ?? 0,
+      unitCost: Number(o.unitCost) || (o.ingredientProductId ? addonCostFromProduct(o.ingredientProductId) : 0),
       unitPrice: Number(o.unitPrice) || 0,
       costManual: Number(o.unitCost) > 0,
     })) ?? [],
@@ -1076,11 +1081,11 @@ onMounted(load)
                 <button type="button" class="text-sm text-brand-600 hover:underline" @click="addAddonOption">+ Adicional</button>
               </div>
               <p class="text-xs text-slate-500">
-                Ej: papas (+$3.000 al cliente, te cuestan $2.000). El precio base no cambia si no los eligen.
+                Ej: papas (+$3.000 al cliente). El producto/insumo es opcional si solo cobras extra.
               </p>
               <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
                 <div class="col-span-3">Nombre</div>
-                <div class="col-span-4">Producto / insumo</div>
+                <div class="col-span-4">Producto / insumo (opcional)</div>
                 <div class="col-span-2">Tu costo</div>
                 <div class="col-span-2">Precio extra</div>
               </div>
@@ -1094,7 +1099,7 @@ onMounted(load)
                     class="w-full px-3 py-2 border rounded-lg text-sm"
                     @change="onAddonIngredientChange(idx)"
                   >
-                    <option :value="0">Producto…</option>
+                    <option :value="0">Sin vínculo (solo precio)</option>
                     <option v-for="ing in addonIngredientOptions" :key="ing.id" :value="ing.id">
                       {{ ing.name }} ({{ formatStock(ing.stock, ing.stockUnit) }})
                     </option>
@@ -1145,12 +1150,11 @@ onMounted(load)
               <button type="button" class="text-sm text-brand-600 hover:underline" @click="addAddonOption">+ Adicional</button>
             </div>
             <p class="text-xs text-slate-500">
-              Ej: bebida, papas extra. El precio base del producto no cambia si no los eligen.
-              Debes elegir el producto o insumo que se descuenta del inventario (ej. la Michelada como producto).
+              Ej: Michelado (+$2.000). El producto/insumo es opcional: úsalo solo si quieres descontar inventario.
             </p>
             <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
               <div class="col-span-3">Nombre</div>
-              <div class="col-span-4">Producto / insumo</div>
+              <div class="col-span-4">Producto / insumo (opcional)</div>
               <div class="col-span-2">Tu costo</div>
               <div class="col-span-2">Precio extra</div>
             </div>
@@ -1164,7 +1168,7 @@ onMounted(load)
                   class="w-full px-3 py-2 border rounded-lg text-sm"
                   @change="onAddonIngredientChange(idx)"
                 >
-                  <option :value="0">Producto…</option>
+                  <option :value="0">Sin vínculo (solo precio)</option>
                   <option v-for="ing in addonIngredientOptions" :key="ing.id" :value="ing.id">
                     {{ ing.name }}
                   </option>

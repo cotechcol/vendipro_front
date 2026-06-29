@@ -44,12 +44,12 @@ export interface ProductRecipe {
 export interface ProductOption {
   id: number
   name: string
-  ingredientProductId: number
+  ingredientProductId?: number | null
   quantity: number
   unit: StockUnit
   unitCost?: number
   unitPrice?: number
-  ingredient?: Product
+  ingredient?: Product | null
 }
 
 export interface ProductOptionGroup {
