@@ -13,9 +13,9 @@ defineEmits<{ checkout: [] }>()
 const cart = useCartStore()
 </script>
 <template>
-  <div class="flex flex-col h-full p-4">
-    <h3 class="font-semibold mb-3">Carrito ({{ cart.itemCount }})</h3>
-    <div class="flex-1 overflow-y-auto space-y-2 mb-4">
+  <div class="flex flex-col h-full min-h-0 p-4">
+    <h3 class="font-semibold mb-3 shrink-0">Carrito ({{ cart.itemCount }})</h3>
+    <div class="flex-1 min-h-0 overflow-y-auto space-y-2 -mx-1 px-1">
       <div v-if="cart.items.length === 0" class="text-slate-400 text-sm text-center py-8">Agrega productos</div>
       <div v-for="item in cart.items" :key="item.cartKey" class="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
         <div class="flex-1 min-w-0">
@@ -31,7 +31,7 @@ const cart = useCartStore()
         <button :disabled="processing" class="text-red-400 text-sm ml-1 disabled:opacity-50" @click="cart.removeItem(item.cartKey)">&times;</button>
       </div>
     </div>
-    <div class="space-y-3 border-t pt-3">
+    <div class="shrink-0 space-y-3 border-t border-slate-200 pt-3 mt-3 bg-white shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.15)]">
       <select v-model="cart.customerId" class="w-full px-3 py-2 border rounded-lg text-sm">
         <option :value="null">Cliente general</option>
         <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>

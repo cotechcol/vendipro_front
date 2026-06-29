@@ -204,17 +204,17 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
-  <div class="pb-20 lg:pb-0">
-    <div class="flex items-center justify-between mb-4">
+  <div class="pb-20 lg:pb-0 lg:h-[calc(100dvh-7rem)] lg:max-h-[calc(100dvh-7rem)] lg:flex lg:flex-col lg:overflow-hidden">
+    <div class="flex items-center justify-between mb-4 shrink-0">
       <h2 class="text-2xl font-bold">Punto de Venta</h2>
       <div v-if="!app.cashSession" class="text-sm bg-red-100 text-red-700 px-3 py-1 rounded-full">
         Caja cerrada — <router-link to="/cash" class="underline">Abrir caja</router-link>
       </div>
     </div>
 
-    <div class="flex flex-col lg:flex-row gap-4 min-h-[calc(100vh-12rem)]">
-      <div class="flex-1 flex flex-col min-h-0">
-        <div class="flex gap-2 mb-3">
+    <div class="flex flex-col lg:flex-row gap-4 lg:flex-1 lg:min-h-0 lg:items-stretch">
+      <div class="flex-1 flex flex-col min-h-0 lg:overflow-hidden">
+        <div class="flex gap-2 mb-3 shrink-0">
           <input
             v-model="search"
             placeholder="Buscar producto o SKU..."
@@ -264,7 +264,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
         </div>
       </div>
 
-      <div class="hidden lg:flex flex-col w-96 bg-white border border-slate-200 rounded-xl shrink-0">
+      <div class="hidden lg:flex flex-col w-96 shrink-0 min-h-0 overflow-hidden bg-white border border-slate-200 rounded-xl">
         <CartPanel :customers="customers" :processing="processing" @checkout="checkout" />
       </div>
     </div>
@@ -279,12 +279,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
     <div v-if="showCart" class="lg:hidden fixed inset-0 z-40">
       <div class="absolute inset-0 bg-black/40" @click="showCart = false" />
-      <div class="absolute bottom-0 inset-x-0 bg-white rounded-t-2xl max-h-[80vh] flex flex-col">
-        <div class="p-4 border-b flex justify-between items-center">
+      <div class="absolute bottom-0 inset-x-0 bg-white rounded-t-2xl max-h-[92dvh] flex flex-col overflow-hidden">
+        <div class="shrink-0 p-4 border-b flex justify-between items-center">
           <h3 class="font-semibold">Carrito</h3>
-          <button @click="showCart = false">&times;</button>
+          <button class="text-2xl leading-none text-slate-500 px-2" @click="showCart = false">&times;</button>
         </div>
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-hidden">
           <CartPanel :customers="customers" :processing="processing" @checkout="checkout(); showCart = false" />
         </div>
       </div>
