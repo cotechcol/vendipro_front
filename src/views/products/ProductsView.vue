@@ -119,6 +119,34 @@ const addonIngredientOptions = computed(() =>
   }),
 )
 
+function validateFlavorOptions(): string | null {
+  const incomplete = form.value.flavorOptions.filter(
+    (o) => !o.name.trim() && o.ingredientProductId,
+  )
+  if (incomplete.length) {
+    return 'Si vinculas un insumo al sabor, indica el nombre.'
+  }
+  if (!form.value.flavorOptions.some((o) => o.name.trim())) {
+    return 'Agrega al menos un sabor con nombre.'
+  }
+  return null
+}
+
+function mapFlavorOptionsForSave() {
+  return form.value.flavorOptions
+    .filter((o) => o.name.trim())
+    .map((o) => {
+      const option: Record<string, unknown> = {
+        name: o.name.trim(),
+        unitCost: Number(o.unitCost) || 0,
+      }
+      if (o.ingredientProductId) {
+        option.ingredientProductId = Number(o.ingredientProductId)
+      }
+      return option
+    })
+}
+
 function validateAddonOptions(): string | null {
   const incomplete = form.value.addonOptions.filter(
     (o) => !o.name.trim() && o.ingredientProductId,
@@ -167,9 +195,9 @@ function addonCostFromProduct(productId: number): number {
 
 function onFlavorIngredientChange(idx: number) {
   const row = form.value.flavorOptions[idx]
-  if (row.ingredientProductId) {
+  row.ingredientProductId = Number(row.ingredientProductId) || 0
+  if (row.ingredientProductId && !row.costManual) {
     row.unitCost = flavorCostFromBulk(row.ingredientProductId)
-    row.costManual = false
   }
 }
 
@@ -377,8 +405,8 @@ async function openEdit(p: Product) {
     useOptions: hasOptions,
     flavorOptions: flavorGroup?.options.map((o) => ({
       name: o.name,
-      ingredientProductId: o.ingredientProductId,
-      unitCost: Number(o.unitCost) || flavorCostFromBulk(o.ingredientProductId),
+      ingredientProductId: o.ingredientProductId ?? 0,
+      unitCost: Number(o.unitCost) || (o.ingredientProductId ? flavorCostFromBulk(o.ingredientProductId) : 0),
       costManual: Number(o.unitCost) > 0,
     })) ?? [{ name: '', ingredientProductId: 0, unitCost: 0, costManual: false }],
     containerOptions: containerGroup?.options.map((o) => ({
@@ -518,6 +546,13 @@ async function save() {
         return
       }
     }
+    if (form.value.productType === 'portion' && form.value.useOptions) {
+      const flavorError = validateFlavorOptions()
+      if (flavorError) {
+        toast.value = { show: true, message: flavorError, type: 'error' }
+        return
+      }
+    }
 
     const payload: Record<string, unknown> = { ...form.value }
     if (form.value.productType === 'bulk') {
@@ -550,13 +585,7 @@ async function save() {
           {
             name: 'Sabor',
             kind: 'flavor',
-            options: form.value.flavorOptions
-              .filter((o) => o.name && o.ingredientProductId)
-              .map((o) => ({
-                name: o.name,
-                ingredientProductId: o.ingredientProductId,
-                unitCost: Number(o.unitCost) || 0,
-              })),
+            options: mapFlavorOptionsForSave(),
           },
           {
             name: 'Envase',
@@ -889,20 +918,23 @@ onMounted(load)
                 </div>
                 <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
                   <div class="col-span-4">Nombre</div>
-                  <div class="col-span-5">Insumo</div>
+                  <div class="col-span-5">Insumo (opcional)</div>
                   <div class="col-span-2">Costo/bola</div>
                 </div>
+                <p class="text-xs text-slate-500">
+                  Puedes dejar el insumo vacío y poner el costo manualmente (ej. sabores sin control de inventario).
+                </p>
                 <div v-for="(flavor, idx) in form.flavorOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
                   <div class="col-span-4">
                     <input v-model="flavor.name" placeholder="Nombre (Fresa…)" class="w-full px-3 py-2 border rounded-lg text-sm" />
                   </div>
                   <div class="col-span-5">
                     <select
-                      v-model="flavor.ingredientProductId"
+                      v-model.number="flavor.ingredientProductId"
                       class="w-full px-3 py-2 border rounded-lg text-sm"
                       @change="onFlavorIngredientChange(idx)"
                     >
-                      <option :value="0">Insumo bulk…</option>
+                      <option :value="0">Sin vínculo (solo costo manual)</option>
                       <option v-for="b in bulkProducts" :key="b.id" :value="b.id">
                         {{ b.name }} ({{ formatStock(b.stock, b.stockUnit) }})
                       </option>
