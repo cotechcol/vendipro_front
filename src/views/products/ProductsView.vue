@@ -112,6 +112,38 @@ const ingredientOptions = computed(() =>
   products.value.filter((p) => p.productType === 'bulk' || p.productType === 'simple'),
 )
 
+const addonIngredientOptions = computed(() =>
+  products.value.filter((p) => {
+    if (editing.value && p.id === editing.value.id) return false
+    return p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'composite'
+  }),
+)
+
+function validateAddonOptions(): string | null {
+  const incomplete = form.value.addonOptions.filter(
+    (o) => (o.name.trim() && !o.ingredientProductId) || (!o.name.trim() && o.ingredientProductId),
+  )
+  if (incomplete.length) {
+    return 'Cada adicional necesita nombre y producto/insumo vinculado.'
+  }
+  return null
+}
+
+function buildAddonOptionGroups() {
+  const addons = form.value.addonOptions.filter((o) => o.name.trim() && o.ingredientProductId)
+  if (!addons.length) return []
+  return [{
+    name: 'Adicionales',
+    kind: 'addon',
+    options: addons.map((o) => ({
+      name: o.name.trim(),
+      ingredientProductId: Number(o.ingredientProductId),
+      unitCost: Number(o.unitCost) || 0,
+      unitPrice: Number(o.unitPrice) || 0,
+    })),
+  }]
+}
+
 function flavorCostFromBulk(bulkId: number): number {
   const bulk = bulkProducts.value.find((b) => b.id === bulkId)
   if (!bulk) return 0
@@ -124,7 +156,8 @@ function containerCostFromProduct(productId: number): number {
 }
 
 function addonCostFromProduct(productId: number): number {
-  return containerCostFromProduct(productId)
+  const p = products.value.find((x) => x.id === productId)
+  return p ? Number(p.costPrice) : 0
 }
 
 function onFlavorIngredientChange(idx: number) {
@@ -297,33 +330,45 @@ function resetForm() {
 function openCreate() {
   editing.value = null
   resetForm()
+  if (form.value.productType === 'simple' || form.value.productType === 'composite') {
+    addAddonOption()
+  }
   showModal.value = true
 }
 
-function openEdit(p: Product) {
+async function openEdit(p: Product) {
   editing.value = p
   clearImageState()
   editingImageUrl.value = p.imageUrl ?? null
-  const flavorGroup = p.optionGroups?.find((g) => g.kind === 'flavor')
-  const containerGroup = p.optionGroups?.find((g) => g.kind === 'container')
-  const addonGroup = p.optionGroups?.find((g) => g.kind === 'addon')
+
+  let product = p
+  try {
+    const { data } = await api.get<Product>(`/products/${p.id}`)
+    product = data
+  } catch {
+    // Usar datos del listado si falla la carga detallada
+  }
+
+  const flavorGroup = product.optionGroups?.find((g) => g.kind === 'flavor')
+  const containerGroup = product.optionGroups?.find((g) => g.kind === 'container')
+  const addonGroup = product.optionGroups?.find((g) => g.kind === 'addon')
   const hasOptions = !!flavorGroup || !!containerGroup
 
   form.value = {
-    sku: p.sku,
-    name: p.name,
-    description: p.description || '',
-    productType: p.productType,
-    stockUnit: p.productType === 'portion' && !['g', 'ml', 'unit'].includes(p.stockUnit)
+    sku: product.sku,
+    name: product.name,
+    description: product.description || '',
+    productType: product.productType,
+    stockUnit: product.productType === 'portion' && !['g', 'ml', 'unit'].includes(product.stockUnit)
       ? 'g'
-      : p.stockUnit,
-    baseProductId: p.baseProductId ?? undefined,
-    portionSize: Number(p.portionSize) || 90,
-    scoopCount: Number(p.scoopCount) || 3,
-    variableScoops: p.variableScoops ?? false,
-    scoopPrices: p.scoopPrices?.length
-      ? [...p.scoopPrices, 0, 0, 0].slice(0, 3)
-      : [Number(p.salePrice), Number(p.salePrice), Number(p.salePrice)],
+      : product.stockUnit,
+    baseProductId: product.baseProductId ?? undefined,
+    portionSize: Number(product.portionSize) || 90,
+    scoopCount: Number(product.scoopCount) || 3,
+    variableScoops: product.variableScoops ?? false,
+    scoopPrices: product.scoopPrices?.length
+      ? [...product.scoopPrices, 0, 0, 0].slice(0, 3)
+      : [Number(product.salePrice), Number(product.salePrice), Number(product.salePrice)],
     useOptions: hasOptions,
     flavorOptions: flavorGroup?.options.map((o) => ({
       name: o.name,
@@ -340,13 +385,13 @@ function openEdit(p: Product) {
       { name: 'Galleta', ingredientProductId: 0, unitCost: 0, costManual: false },
       { name: 'Vaso', ingredientProductId: 0, unitCost: 0, costManual: false },
     ],
-    salePrice: Number(p.salePrice),
-    costPrice: Number(p.costPrice),
-    stock: Number(p.stock),
-    minStock: Number(p.minStock),
-    categoryId: p.categoryId,
-    visibleInPos: p.visibleInPos !== false,
-    recipe: (p.recipe ?? []).map((r) => ({
+    salePrice: Number(product.salePrice),
+    costPrice: Number(product.costPrice),
+    stock: Number(product.stock),
+    minStock: Number(product.minStock),
+    categoryId: product.categoryId,
+    visibleInPos: product.visibleInPos !== false,
+    recipe: (product.recipe ?? []).map((r) => ({
       ingredientProductId: r.ingredientProductId,
       quantity: Number(r.quantity),
       unit: r.unit,
@@ -358,6 +403,9 @@ function openEdit(p: Product) {
       unitPrice: Number(o.unitPrice) || 0,
       costManual: Number(o.unitCost) > 0,
     })) ?? [],
+  }
+  if ((product.productType === 'simple' || product.productType === 'composite') && form.value.addonOptions.length === 0) {
+    addAddonOption()
   }
   showModal.value = true
 }
@@ -404,6 +452,7 @@ function removeAddonOption(idx: number) {
 
 function onAddonIngredientChange(idx: number) {
   const row = form.value.addonOptions[idx]
+  row.ingredientProductId = Number(row.ingredientProductId) || 0
   if (row.ingredientProductId && !row.costManual) {
     row.unitCost = addonCostFromProduct(row.ingredientProductId)
   }
@@ -457,6 +506,14 @@ watch(
 
 async function save() {
   try {
+    if (form.value.productType === 'simple' || form.value.productType === 'composite') {
+      const addonError = validateAddonOptions()
+      if (addonError) {
+        toast.value = { show: true, message: addonError, type: 'error' }
+        return
+      }
+    }
+
     const payload: Record<string, unknown> = { ...form.value }
     if (form.value.productType === 'bulk') {
       payload.salePrice = 0
@@ -521,21 +578,7 @@ async function save() {
       delete payload.portionSize
       payload.stock = 0
       payload.recipe = form.value.recipe.filter((r) => r.ingredientProductId && r.quantity > 0)
-      const addons = form.value.addonOptions.filter((o) => o.name && o.ingredientProductId)
-      if (addons.length) {
-        payload.optionGroups = [{
-          name: 'Adicionales',
-          kind: 'addon',
-          options: addons.map((o) => ({
-            name: o.name,
-            ingredientProductId: o.ingredientProductId,
-            unitCost: Number(o.unitCost) || 0,
-            unitPrice: Number(o.unitPrice) || 0,
-          })),
-        }]
-      } else {
-        payload.optionGroups = []
-      }
+      payload.optionGroups = buildAddonOptionGroups()
       delete payload.addonOptions
     } else {
       delete payload.baseProductId
@@ -548,21 +591,7 @@ async function save() {
       delete payload.flavorOptions
       delete payload.containerOptions
       payload.stockUnit = 'unit'
-      const addons = form.value.addonOptions.filter((o) => o.name && o.ingredientProductId)
-      if (addons.length) {
-        payload.optionGroups = [{
-          name: 'Adicionales',
-          kind: 'addon',
-          options: addons.map((o) => ({
-            name: o.name,
-            ingredientProductId: o.ingredientProductId,
-            unitCost: Number(o.unitCost) || 0,
-            unitPrice: Number(o.unitPrice) || 0,
-          })),
-        }]
-      } else if (editing.value) {
-        payload.optionGroups = []
-      }
+      payload.optionGroups = buildAddonOptionGroups()
       delete payload.addonOptions
     }
 
@@ -1061,12 +1090,12 @@ onMounted(load)
                 </div>
                 <div class="col-span-4">
                   <select
-                    v-model="addon.ingredientProductId"
+                    v-model.number="addon.ingredientProductId"
                     class="w-full px-3 py-2 border rounded-lg text-sm"
                     @change="onAddonIngredientChange(idx)"
                   >
                     <option :value="0">Producto…</option>
-                    <option v-for="ing in ingredientOptions" :key="ing.id" :value="ing.id">
+                    <option v-for="ing in addonIngredientOptions" :key="ing.id" :value="ing.id">
                       {{ ing.name }} ({{ formatStock(ing.stock, ing.stockUnit) }})
                     </option>
                   </select>
@@ -1117,19 +1146,26 @@ onMounted(load)
             </div>
             <p class="text-xs text-slate-500">
               Ej: bebida, papas extra. El precio base del producto no cambia si no los eligen.
+              Debes elegir el producto o insumo que se descuenta del inventario (ej. la Michelada como producto).
             </p>
+            <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
+              <div class="col-span-3">Nombre</div>
+              <div class="col-span-4">Producto / insumo</div>
+              <div class="col-span-2">Tu costo</div>
+              <div class="col-span-2">Precio extra</div>
+            </div>
             <div v-for="(addon, idx) in form.addonOptions" :key="idx" class="grid grid-cols-12 gap-2 items-end">
               <div class="col-span-3">
                 <input v-model="addon.name" placeholder="Bebida, papas…" class="w-full px-3 py-2 border rounded-lg text-sm" />
               </div>
               <div class="col-span-4">
                 <select
-                  v-model="addon.ingredientProductId"
+                  v-model.number="addon.ingredientProductId"
                   class="w-full px-3 py-2 border rounded-lg text-sm"
                   @change="onAddonIngredientChange(idx)"
                 >
                   <option :value="0">Producto…</option>
-                  <option v-for="ing in ingredientOptions" :key="ing.id" :value="ing.id">
+                  <option v-for="ing in addonIngredientOptions" :key="ing.id" :value="ing.id">
                     {{ ing.name }}
                   </option>
                 </select>
