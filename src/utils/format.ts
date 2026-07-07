@@ -119,6 +119,7 @@ export function productTypeLabel(type: string): string {
     bulk: 'Insumo base',
     portion: 'Porción de venta',
     composite: 'Compuesto (receta)',
+    prepared: 'Elaborado (producción)',
   }
   return labels[type] ?? type
 }

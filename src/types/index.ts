@@ -29,7 +29,7 @@ export interface Category {
   active: boolean
 }
 
-export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite'
+export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite' | 'prepared'
 export type StockUnit = 'unit' | 'g' | 'ml'
 export type OptionGroupKind = 'flavor' | 'container' | 'addon'
 
@@ -71,6 +71,7 @@ export interface Product {
   baseProductId?: number | null
   baseProduct?: Product | null
   portionSize?: number | null
+  recipeBatchSize?: number | null
   scoopCount?: number | null
   variableScoops?: boolean
   scoopPrices?: number[] | null

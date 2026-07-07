@@ -60,12 +60,14 @@ const form = ref({
   categoryId: undefined as number | undefined,
   visibleInPos: true,
   recipe: [] as ProductRecipe[],
+  recipeBatchSize: 1000,
   addonOptions: [] as AddonRow[],
 })
 
 const productTypeOptions: { value: ProductType; label: string }[] = [
   { value: 'simple', label: 'Unidad' },
   { value: 'bulk', label: 'Insumo base' },
+  { value: 'prepared', label: 'Elaborado (producción)' },
   { value: 'portion', label: 'Porción de venta' },
   { value: 'composite', label: 'Compuesto (receta)' },
 ]
@@ -99,7 +101,17 @@ const filtered = computed(() => {
 })
 
 const ingredientOptions = computed(() =>
-  products.value.filter((p) => p.productType === 'bulk' || p.productType === 'simple'),
+  products.value.filter((p) => {
+    if (editing.value && p.id === editing.value.id) return false
+    return p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared'
+  }),
+)
+
+const preparedRecipeOptions = computed(() =>
+  products.value.filter((p) => {
+    if (editing.value && p.id === editing.value.id) return false
+    return p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared'
+  }),
 )
 
 const addonIngredientOptions = computed(() =>
@@ -157,8 +169,25 @@ function addonCostFromProduct(productId: number): number {
   return p ? Number(p.costPrice) : 0
 }
 
+function recipeLineCost(line: ProductRecipe): number {
+  const ing = products.value.find((p) => p.id === line.ingredientProductId)
+  if (!ing || !line.quantity) return 0
+  return Number(ing.costPrice) * Number(line.quantity)
+}
+
+function estimatedRecipeCost(): number {
+  return form.value.recipe.reduce((sum, line) => sum + recipeLineCost(line), 0)
+}
+
+function estimatedPreparedUnitCost(): number {
+  const batchCost = estimatedRecipeCost()
+  const batchSize = Number(form.value.recipeBatchSize)
+  if (!batchSize || batchSize <= 0) return 0
+  return Number((batchCost / batchSize).toFixed(4))
+}
+
 function stockDisplay(p: Product): string {
-  if (p.productType === 'bulk') return formatStock(p.stock, p.stockUnit)
+  if (p.productType === 'bulk' || p.productType === 'prepared') return formatStock(p.stock, p.stockUnit)
   if (p.productType === 'portion' || p.productType === 'composite') {
     const avail = p.sellableUnits ?? 0
     return `${avail} disp.`
@@ -167,7 +196,7 @@ function stockDisplay(p: Product): string {
 }
 
 function isLow(p: Product): boolean {
-  if (p.productType === 'bulk' || p.productType === 'simple') {
+  if (p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared') {
     return Number(p.stock) <= Number(p.minStock)
   }
   return (p.sellableUnits ?? 0) <= 0
@@ -251,7 +280,7 @@ function resetForm() {
     useOptions: false,
     containerOptions: [{ name: 'Galleta' }, { name: 'Vaso' }],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
-    categoryId: undefined, visibleInPos: true, recipe: [], addonOptions: [],
+    categoryId: undefined, visibleInPos: true, recipe: [], recipeBatchSize: 1000, addonOptions: [],
   }
   clearImageState()
 }
@@ -313,6 +342,7 @@ async function openEdit(p: Product) {
       quantity: Number(r.quantity),
       unit: r.unit,
     })),
+    recipeBatchSize: Number(product.recipeBatchSize) || 1000,
     addonOptions: addonGroup?.options.map((o) => ({
       name: o.name,
       ingredientProductId: o.ingredientProductId ?? 0,
@@ -371,8 +401,11 @@ function setAddonCost(idx: number, raw: string) {
 }
 
 watch(() => form.value.productType, (type) => {
-  if (type === 'bulk') {
-    form.value.stockUnit = 'g'
+  if (type === 'bulk' || type === 'prepared') {
+    if (type === 'bulk') form.value.stockUnit = 'g'
+    if (type === 'prepared' && !['g', 'ml'].includes(form.value.stockUnit)) {
+      form.value.stockUnit = 'ml'
+    }
     form.value.salePrice = 0
     form.value.visibleInPos = false
   } else if (!editing.value) {
@@ -389,6 +422,7 @@ watch(() => form.value.productType, (type) => {
     }
   }
   if (type === 'composite' && form.value.recipe.length === 0) addRecipeLine()
+  if (type === 'prepared' && form.value.recipe.length === 0) addRecipeLine()
   if (type === 'composite' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
   if (type === 'simple' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
 })
@@ -417,6 +451,18 @@ async function save() {
       delete payload.baseProductId
       delete payload.portionSize
       delete payload.recipe
+      delete payload.recipeBatchSize
+    } else if (form.value.productType === 'prepared') {
+      delete payload.baseProductId
+      delete payload.portionSize
+      payload.salePrice = 0
+      payload.visibleInPos = false
+      payload.recipe = form.value.recipe.filter((r) => r.ingredientProductId && r.quantity > 0)
+      payload.recipeBatchSize = form.value.recipeBatchSize
+      payload.costPrice = estimatedPreparedUnitCost()
+      delete payload.addonOptions
+      delete payload.useOptions
+      delete payload.containerOptions
     } else if (form.value.productType === 'portion') {
       delete payload.recipe
       payload.stock = 0
@@ -505,7 +551,7 @@ async function remove(id: number) {
 }
 
 async function toggleVisibleInPos(p: Product) {
-  if (p.productType === 'bulk') return
+  if (p.productType === 'bulk' || p.productType === 'prepared') return
   const next = !(p.visibleInPos !== false)
   try {
     await api.patch(`/products/${p.id}`, { visibleInPos: next })
@@ -574,13 +620,13 @@ onMounted(load)
               <td class="px-4 py-3 text-slate-500">{{ productTypeLabel(p.productType) }}</td>
               <td class="px-4 py-3 text-slate-500">{{ p.category?.name || '-' }}</td>
               <td class="px-4 py-3 text-right">
-                {{ p.productType === 'bulk' ? '—' : formatMoney(Number(p.salePrice)) }}
+                {{ p.productType === 'bulk' || p.productType === 'prepared' ? '—' : formatMoney(Number(p.salePrice)) }}
               </td>
               <td class="px-4 py-3 text-right" :class="isLow(p) ? 'text-red-600 font-semibold' : ''">
                 {{ stockDisplay(p) }}
               </td>
               <td class="px-4 py-3 text-center">
-                <span v-if="p.productType === 'bulk'" class="text-xs text-slate-400" title="Los insumos no se venden en caja">—</span>
+                <span v-if="p.productType === 'bulk' || p.productType === 'prepared'" class="text-xs text-slate-400" title="No se vende en caja">—</span>
                 <label v-else-if="auth.isAdmin" class="inline-flex items-center justify-center cursor-pointer" :title="p.visibleInPos !== false ? 'Visible en POS' : 'Oculto del POS'">
                   <input
                     type="checkbox"
@@ -611,6 +657,7 @@ onMounted(load)
             <select v-model="form.productType" class="w-full mt-1 px-3 py-2 border rounded-lg" :disabled="!!editing">
               <option value="simple">Unidad (botella, paquete…)</option>
               <option value="bulk">Insumo base (helado, pan, envase… en g/ml/uds)</option>
+              <option value="prepared">Elaborado / producción (salsa de la casa…)</option>
               <option value="portion">Porción de venta (bola 90 g…)</option>
               <option value="composite">Compuesto / receta (hamburguesa…)</option>
             </select>
@@ -618,7 +665,7 @@ onMounted(load)
           <div><label class="text-sm font-medium">SKU</label><input v-model="form.sku" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
           <div class="sm:col-span-2"><label class="text-sm font-medium">Nombre</label><input v-model="form.name" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
           <div class="sm:col-span-2"><label class="text-sm font-medium">Descripción</label><input v-model="form.description" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
-          <div v-if="form.productType !== 'bulk'" class="sm:col-span-2">
+          <div v-if="form.productType !== 'bulk' && form.productType !== 'prepared'" class="sm:col-span-2">
             <label class="text-sm font-medium">Foto del producto</label>
             <div class="mt-2 flex flex-wrap items-start gap-4">
               <div class="w-24 h-24 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
@@ -680,6 +727,88 @@ onMounted(load)
               <label class="text-sm font-medium">Costo por {{ form.stockUnit === 'unit' ? 'ud' : form.stockUnit }}</label>
               <input v-model.number="form.costPrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
             </div>
+          </div>
+        </template>
+
+        <!-- Elaborado -->
+        <template v-if="form.productType === 'prepared'">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-teal-50 rounded-xl">
+            <div>
+              <label class="text-sm font-medium">Unidad de stock</label>
+              <select v-model="form.stockUnit" class="w-full mt-1 px-3 py-2 border rounded-lg">
+                <option value="g">Gramos (g)</option>
+                <option value="ml">Mililitros (ml)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm font-medium">Rinde por lote</label>
+              <input
+                v-model.number="form.recipeBatchSize"
+                type="number"
+                step="0.001"
+                min="0.001"
+                class="w-full mt-1 px-3 py-2 border rounded-lg"
+              />
+              <p class="text-xs text-slate-500 mt-1">
+                Cantidad que produce la receta completa (ej. 5000 {{ form.stockUnit }} = 5 L)
+              </p>
+            </div>
+            <div v-if="!editing">
+              <label class="text-sm font-medium">Stock inicial</label>
+              <input v-model.number="form.stock" type="number" step="0.001" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              <p class="text-xs text-slate-500 mt-1">Usa inventario para producir más adelante</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium">Alerta mínima</label>
+              <input v-model.number="form.minStock" type="number" step="0.001" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Costo por {{ form.stockUnit }}</label>
+              <input
+                :value="formatCostInput(estimatedPreparedUnitCost())"
+                type="text"
+                readonly
+                class="w-full mt-1 px-3 py-2 border rounded-lg bg-slate-50 text-slate-600"
+              />
+              <p class="text-xs text-slate-500 mt-1">Calculado desde la receta del lote</p>
+            </div>
+          </div>
+
+          <div class="p-4 bg-teal-50/60 rounded-xl space-y-3 border border-teal-100">
+            <div class="flex justify-between items-center">
+              <div>
+                <label class="text-sm font-medium">Ingredientes del lote</label>
+                <p class="text-xs text-slate-500">Al agregar stock en inventario se descontarán proporcionalmente</p>
+              </div>
+              <button type="button" class="text-sm text-brand-600 hover:underline" @click="addRecipeLine">+ Ingrediente</button>
+            </div>
+            <div v-for="(line, idx) in form.recipe" :key="idx" class="grid grid-cols-12 gap-2 items-end">
+              <div class="col-span-6">
+                <select v-model="line.ingredientProductId" class="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option :value="0">Ingrediente…</option>
+                  <option v-for="ing in preparedRecipeOptions" :key="ing.id" :value="ing.id">
+                    {{ ing.name }} ({{ formatStock(ing.stock, ing.stockUnit) }})
+                  </option>
+                </select>
+              </div>
+              <div class="col-span-3">
+                <input v-model.number="line.quantity" type="number" step="0.001" min="0.001" placeholder="Cant." class="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div class="col-span-2">
+                <select v-model="line.unit" class="w-full px-2 py-2 border rounded-lg text-sm">
+                  <option value="g">g</option>
+                  <option value="ml">ml</option>
+                  <option value="unit">uds</option>
+                </select>
+              </div>
+              <div class="col-span-1">
+                <button type="button" class="text-red-500 text-sm" @click="removeRecipeLine(idx)">✕</button>
+              </div>
+            </div>
+            <p v-if="form.recipe.length" class="text-xs text-slate-600 pt-1">
+              Costo del lote: {{ formatMoney(estimatedRecipeCost()) }}
+              · Costo unitario: {{ formatMoney(estimatedPreparedUnitCost()) }}/{{ form.stockUnit }}
+            </p>
           </div>
         </template>
 
@@ -990,7 +1119,7 @@ onMounted(load)
           </select>
         </div>
 
-        <div v-if="form.productType !== 'bulk'" class="p-4 bg-slate-50 rounded-xl">
+        <div v-if="form.productType !== 'bulk' && form.productType !== 'prepared'" class="p-4 bg-slate-50 rounded-xl">
           <label class="inline-flex items-center gap-2 cursor-pointer">
             <input v-model="form.visibleInPos" type="checkbox" class="rounded text-primary-600" />
             <span class="text-sm font-medium">Mostrar en punto de venta</span>

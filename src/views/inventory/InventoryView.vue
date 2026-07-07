@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/api/client'
 import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
@@ -37,6 +37,22 @@ interface InventorySummary {
   inventoryRetail: number
 }
 
+interface ProductionPreview {
+  productName: string
+  quantityProduced: number
+  recipeBatchSize: number
+  stockUnit: string
+  batches: number
+  canProduce: boolean
+  ingredients: {
+    name: string
+    quantity: number
+    stockUnit: string
+    available: number
+    sufficient: boolean
+  }[]
+}
+
 const tab = ref<'stock' | 'movements'>('stock')
 const products = ref<Product[]>([])
 const categories = ref<Category[]>([])
@@ -53,12 +69,15 @@ const statusFilter = ref<'all' | 'ok' | 'low' | 'out'>('all')
 const movementProductFilter = ref<number | ''>('')
 
 const form = ref({ productId: 0, type: 'adjustment_in', quantity: 1, notes: '' })
+const productionPreview = ref<ProductionPreview | null>(null)
+const previewLoading = ref(false)
 
 const typeLabels: Record<string, string> = {
   sale: 'Venta',
   purchase: 'Compra',
   adjustment_in: 'Entrada',
   adjustment_out: 'Salida',
+  production: 'Producción',
 }
 
 const typeStyles: Record<string, string> = {
@@ -66,6 +85,7 @@ const typeStyles: Record<string, string> = {
   purchase: 'bg-green-100 text-green-700',
   adjustment_in: 'bg-blue-100 text-blue-700',
   adjustment_out: 'bg-orange-100 text-orange-700',
+  production: 'bg-teal-100 text-teal-700',
 }
 
 function stockStatus(p: Product): 'ok' | 'low' | 'out' {
@@ -89,7 +109,15 @@ function stockLabel(p: Product): string {
 }
 
 const adjustableProducts = computed(() =>
-  products.value.filter((p) => p.productType === 'simple' || p.productType === 'bulk'),
+  products.value.filter((p) => p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared'),
+)
+
+const selectedProduct = computed(() =>
+  products.value.find((p) => p.id === form.value.productId) ?? null,
+)
+
+const isPreparedProduction = computed(() =>
+  selectedProduct.value?.productType === 'prepared' && form.value.type === 'adjustment_in',
 )
 
 const statusLabels = { ok: 'Normal', low: 'Bajo', out: 'Agotado' }
@@ -125,14 +153,16 @@ const movementGroups = computed((): MovementGroup[] => {
   const usedRefs = new Set<string>()
 
   for (const m of list) {
-    if (m.type === 'sale' && m.reference && !usedRefs.has(m.reference)) {
-      const related = list.filter((x) => x.reference === m.reference && x.type === 'sale')
+    if ((m.type === 'sale' || m.reference?.startsWith('PROD-')) && m.reference && !usedRefs.has(m.reference)) {
+      const related = list.filter((x) => x.reference === m.reference && (
+        x.type === 'sale' || x.reference?.startsWith('PROD-')
+      ))
       if (related.length > 1) {
         usedRefs.add(m.reference)
         groups.push({
           id: m.reference,
           createdAt: m.createdAt,
-          type: m.type,
+          type: m.reference.startsWith('PROD-') ? 'production' : m.type,
           reference: m.reference,
           movements: related,
         })
@@ -180,8 +210,32 @@ function openAdjust(product?: Product) {
     quantity: 1,
     notes: '',
   }
+  productionPreview.value = null
   showModal.value = true
 }
+
+async function loadProductionPreview() {
+  if (!isPreparedProduction.value || !form.value.productId || form.value.quantity <= 0) {
+    productionPreview.value = null
+    return
+  }
+  previewLoading.value = true
+  try {
+    const { data } = await api.get<ProductionPreview>('/inventory/production-preview', {
+      params: { productId: form.value.productId, quantity: form.value.quantity },
+    })
+    productionPreview.value = data
+  } catch {
+    productionPreview.value = null
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+watch(
+  () => [form.value.productId, form.value.type, form.value.quantity],
+  () => { loadProductionPreview() },
+)
 
 async function load() {
   loading.value = true
@@ -354,7 +408,7 @@ onMounted(load)
               </td>
               <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ stockLabel(p) }}</td>
               <td class="px-4 py-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
-                {{ p.productType === 'bulk' || p.productType === 'simple' ? formatStock(p.minStock, p.stockUnit) : '—' }}
+                {{ p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared' ? formatStock(p.minStock, p.stockUnit) : '—' }}
               </td>
               <td class="px-4 py-3 text-right text-slate-600 hidden lg:table-cell tabular-nums">
                 {{ formatMoney(Number(p.costPrice) * Number(p.stock)) }}
@@ -366,11 +420,11 @@ onMounted(load)
               </td>
               <td class="px-4 py-3 text-right">
                 <button
-                  v-if="p.productType === 'simple' || p.productType === 'bulk'"
+                  v-if="p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared'"
                   class="text-primary-600 hover:text-primary-700 text-xs font-medium hover:underline"
                   @click="openAdjust(p)"
                 >
-                  Ajustar
+                  {{ p.productType === 'prepared' ? 'Producir' : 'Ajustar' }}
                 </button>
               </td>
             </tr>
@@ -416,7 +470,12 @@ onMounted(load)
                   {{ formatDate(group.createdAt) }}
                 </td>
                 <td class="px-4 py-2.5 text-slate-700 text-xs font-semibold" colspan="2">
-                  Venta · {{ group.movements.length }} insumos descontados
+                  <template v-if="group.reference?.startsWith('PROD-')">
+                    Producción · {{ group.movements.length }} movimientos
+                  </template>
+                  <template v-else>
+                    Venta · {{ group.movements.length }} insumos descontados
+                  </template>
                 </td>
                 <td class="px-4 py-2.5">
                   <span :class="['text-xs font-medium px-2.5 py-1 rounded-full', typeStyles[group.type] || 'bg-slate-100 text-slate-600']">
@@ -500,6 +559,26 @@ onMounted(load)
               class="w-full mt-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm"
             />
           </div>
+        </div>
+        <div v-if="isPreparedProduction" class="rounded-xl border border-teal-200 bg-teal-50 p-4 space-y-2">
+          <p class="text-sm font-medium text-teal-900">Producción con receta</p>
+          <p v-if="previewLoading" class="text-xs text-teal-700">Calculando ingredientes…</p>
+          <template v-else-if="productionPreview">
+            <p class="text-xs text-teal-800">
+              Se producirán {{ formatStock(productionPreview.quantityProduced, productionPreview.stockUnit) }}
+              ({{ productionPreview.batches.toFixed(2) }} lote{{ productionPreview.batches === 1 ? '' : 's' }}
+              de {{ formatStock(productionPreview.recipeBatchSize, productionPreview.stockUnit) }})
+            </p>
+            <ul class="text-xs text-teal-900 space-y-1">
+              <li v-for="(ing, idx) in productionPreview.ingredients" :key="idx" :class="ing.sufficient ? '' : 'text-red-700 font-medium'">
+                {{ ing.name }}: −{{ formatStock(ing.quantity, ing.stockUnit) }}
+                <span class="text-teal-700">(disponible: {{ formatStock(ing.available, ing.stockUnit) }})</span>
+              </li>
+            </ul>
+            <p v-if="!productionPreview.canProduce" class="text-xs text-red-700 font-medium">
+              Stock insuficiente en uno o más ingredientes.
+            </p>
+          </template>
         </div>
         <div>
           <label class="text-sm font-medium text-slate-700">Notas (opcional)</label>
