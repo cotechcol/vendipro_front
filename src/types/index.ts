@@ -179,6 +179,55 @@ export interface CartItem {
   cartKey: string
 }
 
+export interface TableOrderItem {
+  id: number
+  orderId: number
+  productId: number
+  productName: string
+  quantity: number
+  unitPrice: number
+  selectedOptionIds?: number[] | null
+  optionLabel?: string | null
+  portionScoopCount?: number | null
+  notes?: string | null
+  createdAt?: string
+}
+
+export interface TableOrderSummary {
+  id: number
+  customerId?: number | null
+  notes?: string | null
+  total: number
+  itemCount: number
+  createdAt: string
+}
+
+export interface RestaurantTable {
+  id: number
+  storeId: number
+  name: string
+  capacity: number
+  active: boolean
+  sortOrder: number
+  status?: 'free' | 'occupied'
+  openOrder?: TableOrderSummary | null
+}
+
+export interface TableOrder {
+  id: number
+  storeId: number
+  tableId: number
+  status: 'open' | 'closed'
+  customerId?: number | null
+  notes?: string | null
+  table?: RestaurantTable
+  items: TableOrderItem[]
+  total: number
+  itemCount: number
+  saleId?: number | null
+  createdAt: string
+}
+
 export interface DashboardData {
   totalSales: number
   revenue: number

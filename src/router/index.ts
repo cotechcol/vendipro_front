@@ -17,6 +17,8 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue') },
         { path: 'pos', name: 'pos', component: () => import('@/views/pos/PosView.vue') },
+        { path: 'tables', name: 'tables', component: () => import('@/views/tables/TablesView.vue') },
+        { path: 'tables/:orderId', name: 'table-order', component: () => import('@/views/tables/TableOrderView.vue') },
         { path: 'products', name: 'products', component: () => import('@/views/products/ProductsView.vue') },
         { path: 'categories', name: 'categories', component: () => import('@/views/categories/CategoriesView.vue'), meta: { adminOnly: true } },
         { path: 'inventory', name: 'inventory', component: () => import('@/views/inventory/InventoryView.vue'), meta: { adminOnly: true } },

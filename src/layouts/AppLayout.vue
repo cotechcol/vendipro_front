@@ -16,9 +16,10 @@ const sidebarOpen = ref(false)
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◈', roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/pos', label: 'Punto de Venta', icon: '⬡', roles: ['super_admin', 'admin', 'cashier'], highlight: true },
+  { to: '/tables', label: 'Mesas', icon: '▤', roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/products', label: 'Productos', icon: '▣', roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/categories', label: 'Categorías', icon: '◫', roles: ['super_admin', 'admin'] },
-  { to: '/inventory', label: 'Inventario', icon: '▤', roles: ['super_admin', 'admin'] },
+  { to: '/inventory', label: 'Inventario', icon: '▥', roles: ['super_admin', 'admin'] },
   { to: '/customers', label: 'Clientes', icon: '◎', roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/suppliers', label: 'Proveedores', icon: '▥', roles: ['super_admin', 'admin'] },
   { to: '/purchases', label: 'Compras', icon: '◉', roles: ['super_admin', 'admin'] },
@@ -260,6 +261,9 @@ watch(() => storeStore.activeStoreId, loadStoreData)
         </RouterLink>
         <RouterLink to="/pos" class="flex flex-col items-center text-[10px] px-3 py-1 rounded-xl" :class="route.path === '/pos' ? 'text-brand-600 font-semibold' : 'text-slate-400'">
           <span class="text-base mb-0.5">⬡</span> Venta
+        </RouterLink>
+        <RouterLink to="/tables" class="flex flex-col items-center text-[10px] px-3 py-1 rounded-xl" :class="route.path.startsWith('/tables') ? 'text-brand-600 font-semibold' : 'text-slate-400'">
+          <span class="text-base mb-0.5">▤</span> Mesas
         </RouterLink>
         <RouterLink to="/reports" class="flex flex-col items-center text-[10px] px-3 py-1 rounded-xl" :class="route.path === '/reports' ? 'text-brand-600 font-semibold' : 'text-slate-400'">
           <span class="text-base mb-0.5">▲</span> Reportes
