@@ -84,6 +84,22 @@ async function deactivateTable(table: RestaurantTable) {
   }
 }
 
+async function releaseEmptyTable(table: RestaurantTable) {
+  if (!table.openOrder || table.openOrder.itemCount > 0) return
+  if (!confirm(`¿Poner ${table.name} como disponible?`)) return
+  processingId.value = table.id
+  try {
+    await api.post(`/tables/orders/${table.openOrder.id}/release`)
+    toast.value = { show: true, message: 'Mesa disponible', type: 'success' }
+    await load()
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    toast.value = { show: true, message: msg || 'No se pudo liberar la mesa', type: 'error' }
+  } finally {
+    processingId.value = null
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -142,6 +158,14 @@ onMounted(load)
             @click.stop="deactivateTable(table)"
           >
             Desactivar
+          </span>
+        </div>
+        <div v-else-if="table.openOrder?.itemCount === 0" class="mt-4 pt-4 border-t border-amber-100">
+          <span
+            class="text-xs text-slate-600 hover:underline"
+            @click.stop="releaseEmptyTable(table)"
+          >
+            Poner disponible
           </span>
         </div>
       </button>

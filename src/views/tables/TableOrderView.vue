@@ -195,13 +195,34 @@ async function removeItem(itemId: number) {
   }
 }
 
-function openCheckout() {
+async function openCheckout() {
+  try {
+    await app.fetchCashSession()
+  } catch {
+    app.cashSession = null
+  }
   if (!app.cashSession) {
     toast.value = { show: true, message: 'Debes abrir la caja primero', type: 'error' }
     return
   }
   checkoutForm.value.amountPaid = Number(order.value?.total ?? 0)
   showCheckout.value = true
+}
+
+async function releaseEmptyOrder() {
+  if (!order.value || order.value.items.length > 0) return
+  if (!confirm('¿Poner esta mesa como disponible?')) return
+  processing.value = true
+  try {
+    await api.post(`/tables/orders/${order.value.id}/release`)
+    toast.value = { show: true, message: 'Mesa disponible', type: 'success' }
+    router.push('/tables')
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    toast.value = { show: true, message: msg || 'No se pudo liberar la mesa', type: 'error' }
+  } finally {
+    processing.value = false
+  }
 }
 
 async function closeOrder() {
@@ -254,13 +275,23 @@ onMounted(load)
         </h1>
         <p class="text-sm text-slate-500">Cuenta abierta · agrega productos y cobra al final</p>
       </div>
-      <button
-        class="btn-primary"
-        :disabled="!canCheckout"
-        @click="openCheckout"
-      >
-        Cobrar mesa {{ order ? formatMoney(order.total) : '' }}
-      </button>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-if="order && order.items.length === 0"
+          class="btn-secondary"
+          :disabled="processing"
+          @click="releaseEmptyOrder"
+        >
+          Poner disponible
+        </button>
+        <button
+          class="btn-primary"
+          :disabled="!canCheckout"
+          @click="openCheckout"
+        >
+          Cobrar mesa {{ order ? formatMoney(order.total) : '' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="text-center text-slate-400 py-16">Cargando cuenta...</div>
@@ -343,6 +374,14 @@ onMounted(load)
             @click="openCheckout"
           >
             Cobrar mesa
+          </button>
+          <button
+            v-if="order && order.items.length === 0"
+            class="w-full border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium py-2.5 rounded-xl disabled:opacity-50"
+            :disabled="processing"
+            @click="releaseEmptyOrder"
+          >
+            Poner mesa disponible
           </button>
         </div>
       </aside>
