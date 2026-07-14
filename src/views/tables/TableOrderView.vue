@@ -48,7 +48,8 @@ const filteredProducts = computed(() => {
   return list
 })
 
-const canCheckout = computed(() => !!order.value?.items.length && !processing.value)
+const isOpenOrder = computed(() => order.value?.status === 'open')
+const canCheckout = computed(() => isOpenOrder.value && !!order.value?.items.length && !processing.value)
 
 async function load() {
   loading.value = true
@@ -63,6 +64,11 @@ async function load() {
     products.value = prodRes.data
     categories.value = catRes.data
     customers.value = custRes.data.data
+    if (orderRes.data.status !== 'open') {
+      toast.value = { show: true, message: 'Esta cuenta ya está cerrada', type: 'error' }
+      router.replace('/tables')
+      return
+    }
     checkoutForm.value.customerId = orderRes.data.customerId ?? null
     checkoutForm.value.amountPaid = Number(orderRes.data.total ?? 0)
   } catch (e: unknown) {
@@ -196,6 +202,11 @@ async function removeItem(itemId: number) {
 }
 
 async function openCheckout() {
+  if (!isOpenOrder.value) {
+    toast.value = { show: true, message: 'Esta cuenta ya está cerrada', type: 'error' }
+    router.replace('/tables')
+    return
+  }
   try {
     await app.fetchCashSession()
   } catch {
@@ -210,7 +221,7 @@ async function openCheckout() {
 }
 
 async function releaseEmptyOrder() {
-  if (!order.value || order.value.items.length > 0) return
+  if (!order.value || !isOpenOrder.value || order.value.items.length > 0) return
   if (!confirm('¿Poner esta mesa como disponible?')) return
   processing.value = true
   try {
@@ -226,7 +237,11 @@ async function releaseEmptyOrder() {
 }
 
 async function closeOrder() {
-  if (!order.value) return
+  if (!order.value || !isOpenOrder.value) {
+    toast.value = { show: true, message: 'Esta cuenta ya está cerrada', type: 'error' }
+    router.replace('/tables')
+    return
+  }
   processing.value = true
   try {
     const { data } = await api.post<{ sale: Sale }>(`/tables/orders/${order.value.id}/close`, {
@@ -277,7 +292,7 @@ onMounted(load)
       </div>
       <div class="flex flex-wrap gap-2">
         <button
-          v-if="order && order.items.length === 0"
+          v-if="isOpenOrder && order && order.items.length === 0"
           class="btn-secondary"
           :disabled="processing"
           @click="releaseEmptyOrder"
@@ -376,7 +391,7 @@ onMounted(load)
             Cobrar mesa
           </button>
           <button
-            v-if="order && order.items.length === 0"
+            v-if="isOpenOrder && order && order.items.length === 0"
             class="w-full border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium py-2.5 rounded-xl disabled:opacity-50"
             :disabled="processing"
             @click="releaseEmptyOrder"
