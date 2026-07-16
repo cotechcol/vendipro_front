@@ -61,12 +61,16 @@ const movements = ref<Movement[]>([])
 const summary = ref<InventorySummary | null>(null)
 const loading = ref(true)
 const showModal = ref(false)
+const showZeroModal = ref(false)
+const zeroing = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
 
 const search = ref('')
 const categoryFilter = ref<number | ''>('')
 const statusFilter = ref<'all' | 'ok' | 'low' | 'out'>('all')
 const movementProductFilter = ref<number | ''>('')
+const selectedIds = ref<Set<number>>(new Set())
+const zeroNotes = ref('')
 
 const form = ref({ productId: 0, type: 'adjustment_in', quantity: 1, notes: '' })
 const productionPreview = ref<ProductionPreview | null>(null)
@@ -108,8 +112,12 @@ function stockLabel(p: Product): string {
   return formatStock(p.stock, p.stockUnit)
 }
 
+function isAdjustable(p: Product): boolean {
+  return p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared'
+}
+
 const adjustableProducts = computed(() =>
-  products.value.filter((p) => p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared'),
+  products.value.filter((p) => isAdjustable(p)),
 )
 
 const selectedProduct = computed(() =>
@@ -142,6 +150,29 @@ const filteredProducts = computed(() => {
   return list
 })
 
+const selectableFiltered = computed(() =>
+  filteredProducts.value.filter((p) => isAdjustable(p)),
+)
+
+const selectedCount = computed(() => selectedIds.value.size)
+
+const allFilteredSelected = computed(() => {
+  const list = selectableFiltered.value
+  return list.length > 0 && list.every((p) => selectedIds.value.has(p.id))
+})
+
+const selectedProducts = computed(() =>
+  products.value.filter((p) => selectedIds.value.has(p.id)),
+)
+
+const zeroAlreadyZeroCount = computed(() =>
+  selectedProducts.value.filter((p) => Number(p.stock) <= 0).length,
+)
+
+const zeroWillChangeCount = computed(() =>
+  selectedProducts.value.filter((p) => Number(p.stock) > 0).length,
+)
+
 const filteredMovements = computed(() => {
   if (!movementProductFilter.value) return movements.value
   return movements.value.filter((m) => m.product?.id === movementProductFilter.value)
@@ -153,16 +184,21 @@ const movementGroups = computed((): MovementGroup[] => {
   const usedRefs = new Set<string>()
 
   for (const m of list) {
-    if ((m.type === 'sale' || m.reference?.startsWith('PROD-')) && m.reference && !usedRefs.has(m.reference)) {
-      const related = list.filter((x) => x.reference === m.reference && (
-        x.type === 'sale' || x.reference?.startsWith('PROD-')
-      ))
+    const isGroupedRef = m.reference?.startsWith('PROD-')
+      || m.reference?.startsWith('ZERO-')
+      || m.type === 'sale'
+    if (isGroupedRef && m.reference && !usedRefs.has(m.reference)) {
+      const related = list.filter((x) => x.reference === m.reference)
       if (related.length > 1) {
         usedRefs.add(m.reference)
         groups.push({
           id: m.reference,
           createdAt: m.createdAt,
-          type: m.reference.startsWith('PROD-') ? 'production' : m.type,
+          type: m.reference.startsWith('PROD-')
+            ? 'production'
+            : m.reference.startsWith('ZERO-')
+              ? 'adjustment_out'
+              : m.type,
           reference: m.reference,
           movements: related,
         })
@@ -180,6 +216,63 @@ const movementGroups = computed((): MovementGroup[] => {
   }
   return groups
 })
+
+function toggleSelect(id: number) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleSelectAllFiltered() {
+  const list = selectableFiltered.value
+  const next = new Set(selectedIds.value)
+  if (allFilteredSelected.value) {
+    for (const p of list) next.delete(p.id)
+  } else {
+    for (const p of list) next.add(p.id)
+  }
+  selectedIds.value = next
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+function openZeroModal() {
+  if (!selectedCount.value) {
+    toast.value = { show: true, message: 'Selecciona al menos un producto', type: 'error' }
+    return
+  }
+  zeroNotes.value = ''
+  showZeroModal.value = true
+}
+
+async function confirmZero() {
+  if (!selectedCount.value || zeroing.value) return
+  zeroing.value = true
+  try {
+    const { data } = await api.post<{ zeroed: number; skipped: number; reference: string }>(
+      '/inventory/zero',
+      {
+        productIds: [...selectedIds.value],
+        notes: zeroNotes.value.trim() || undefined,
+      },
+    )
+    showZeroModal.value = false
+    clearSelection()
+    const parts = [`${data.zeroed} producto${data.zeroed === 1 ? '' : 's'} a cero`]
+    if (data.skipped) parts.push(`${data.skipped} ya estaban en 0`)
+    toast.value = { show: true, message: parts.join(' · '), type: 'success' }
+    await load()
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      || 'No se pudo poner el inventario a cero'
+    toast.value = { show: true, message: Array.isArray(msg) ? msg.join(', ') : msg, type: 'error' }
+  } finally {
+    zeroing.value = false
+  }
+}
 
 function isOutflow(type: string): boolean {
   return type === 'sale' || type === 'adjustment_out'
@@ -279,6 +372,13 @@ onMounted(load)
   <div class="space-y-6">
     <PageHeader title="Inventario" subtitle="Control de stock y movimientos">
       <template #actions>
+        <button
+          class="btn-secondary"
+          :disabled="!selectedCount"
+          @click="openZeroModal"
+        >
+          Poner a cero{{ selectedCount ? ` (${selectedCount})` : '' }}
+        </button>
         <button class="btn-primary" @click="openAdjust()">+ Ajustar stock</button>
       </template>
     </PageHeader>
@@ -368,10 +468,40 @@ onMounted(load)
         </select>
       </div>
 
+      <div
+        v-if="selectedCount || selectableFiltered.length"
+        class="px-4 py-2.5 border-b border-slate-100 bg-slate-50/80 flex flex-wrap items-center gap-3 text-sm"
+      >
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            class="rounded border-slate-300"
+            :checked="allFilteredSelected"
+            :indeterminate.prop="selectedCount > 0 && !allFilteredSelected"
+            :disabled="!selectableFiltered.length"
+            @change="toggleSelectAllFiltered"
+          />
+          <span class="text-slate-600">
+            {{ allFilteredSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles' }}
+          </span>
+        </label>
+        <span v-if="selectedCount" class="text-slate-500">
+          {{ selectedCount }} seleccionado{{ selectedCount === 1 ? '' : 's' }}
+        </span>
+        <button
+          v-if="selectedCount"
+          class="text-slate-500 hover:text-slate-700 text-xs underline"
+          @click="clearSelection"
+        >
+          Limpiar selección
+        </button>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-600">
             <tr>
+              <th class="w-10 px-3 py-3"></th>
               <th class="text-left px-4 py-3 font-medium">Producto</th>
               <th class="text-left px-4 py-3 font-medium hidden md:table-cell">Categoría</th>
               <th class="text-left px-4 py-3 font-medium">Nivel</th>
@@ -384,13 +514,23 @@ onMounted(load)
           </thead>
           <tbody>
             <tr v-if="filteredProducts.length === 0">
-              <td colspan="8" class="px-4 py-12 text-center text-slate-400">No se encontraron productos</td>
+              <td colspan="9" class="px-4 py-12 text-center text-slate-400">No se encontraron productos</td>
             </tr>
             <tr
               v-for="p in filteredProducts"
               :key="p.id"
               class="border-t border-slate-100 hover:bg-slate-50/80 transition-colors"
+              :class="selectedIds.has(p.id) ? 'bg-primary-50/40' : ''"
             >
+              <td class="px-3 py-3">
+                <input
+                  v-if="isAdjustable(p)"
+                  type="checkbox"
+                  class="rounded border-slate-300"
+                  :checked="selectedIds.has(p.id)"
+                  @change="toggleSelect(p.id)"
+                />
+              </td>
               <td class="px-4 py-3">
                 <p class="font-medium text-slate-800">{{ p.name }}</p>
                 <p class="text-xs text-slate-400 font-mono">{{ p.sku }}</p>
@@ -420,7 +560,7 @@ onMounted(load)
               </td>
               <td class="px-4 py-3 text-right">
                 <button
-                  v-if="p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared'"
+                  v-if="isAdjustable(p)"
                   class="text-primary-600 hover:text-primary-700 text-xs font-medium hover:underline"
                   @click="openAdjust(p)"
                 >
@@ -472,6 +612,9 @@ onMounted(load)
                 <td class="px-4 py-2.5 text-slate-700 text-xs font-semibold" colspan="2">
                   <template v-if="group.reference?.startsWith('PROD-')">
                     Producción · {{ group.movements.length }} movimientos
+                  </template>
+                  <template v-else-if="group.reference?.startsWith('ZERO-')">
+                    Puesta a cero · {{ group.movements.length }} productos
                   </template>
                   <template v-else>
                     Venta · {{ group.movements.length }} insumos descontados
@@ -593,6 +736,42 @@ onMounted(load)
         <button class="px-4 py-2 text-slate-600 hover:text-slate-800" @click="showModal = false">Cancelar</button>
         <button class="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium" @click="adjust">
           Aplicar ajuste
+        </button>
+      </template>
+    </AppModal>
+
+    <AppModal title="Poner inventario a cero" :show="showZeroModal" @close="showZeroModal = false">
+      <div class="space-y-4">
+        <p class="text-sm text-slate-600">
+          Vas a poner a <strong>0</strong> el stock de
+          <strong>{{ selectedCount }}</strong> producto{{ selectedCount === 1 ? '' : 's' }}.
+        </p>
+        <ul class="text-sm text-slate-700 space-y-1 bg-slate-50 rounded-lg p-3 border border-slate-100">
+          <li>{{ zeroWillChangeCount }} con stock se pondrán en cero</li>
+          <li v-if="zeroAlreadyZeroCount">{{ zeroAlreadyZeroCount }} ya están en 0 (se omiten)</li>
+        </ul>
+        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          Esta acción registra una salida de inventario por cada producto. No se puede deshacer automáticamente.
+        </p>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Notas (opcional)</label>
+          <input
+            v-model="zeroNotes"
+            placeholder="Ej: Cierre de período, reinicio de inventario..."
+            class="w-full mt-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <button class="px-4 py-2 text-slate-600 hover:text-slate-800" :disabled="zeroing" @click="showZeroModal = false">
+          Cancelar
+        </button>
+        <button
+          class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:opacity-50"
+          :disabled="zeroing || !zeroWillChangeCount"
+          @click="confirmZero"
+        >
+          {{ zeroing ? 'Aplicando...' : 'Confirmar puesta a cero' }}
         </button>
       </template>
     </AppModal>
