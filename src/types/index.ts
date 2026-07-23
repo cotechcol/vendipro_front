@@ -193,6 +193,13 @@ export interface TableOrderItem {
   createdAt?: string
 }
 
+export interface TableOrderItemMutation {
+  item?: TableOrderItem
+  removedItemId?: number
+  total: number
+  itemCount: number
+}
+
 export interface TableOrderSummary {
   id: number
   customerId?: number | null

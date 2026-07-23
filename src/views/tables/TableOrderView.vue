@@ -7,7 +7,7 @@ import ProductOptionsModal from '@/components/ProductOptionsModal.vue'
 import TicketPrint from '@/components/TicketPrint.vue'
 import Toast from '@/components/Toast.vue'
 import { useAppStore } from '@/stores/app'
-import type { Category, Customer, Product, Sale, Setting, TableOrder } from '@/types'
+import type { Category, Customer, Product, Sale, Setting, TableOrder, TableOrderItem, TableOrderItemMutation } from '@/types'
 import { formatMoney } from '@/utils/format'
 import { printHtmlElement } from '@/utils/printTicket'
 
@@ -37,6 +37,7 @@ const checkoutForm = ref({
   amountPaid: 0,
 })
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
+const productDetailCache = ref<Map<number, Product>>(new Map())
 
 const filteredProducts = computed(() => {
   let list = products.value
@@ -92,6 +93,54 @@ function hasConfigurableOptions(p: Product): boolean {
   return p.productType === 'portion' && (p.scoopCount ?? 0) > 0
 }
 
+function optionsNeedDetail(p: Product): boolean {
+  if (!hasConfigurableOptions(p)) return false
+  if (!(p.optionGroups?.length ?? 0)) return true
+  return (p.optionGroups ?? []).some((g) =>
+    (g.options ?? []).some((o) => o.ingredientProductId && !o.ingredient),
+  )
+}
+
+async function resolveProductDetail(product: Product): Promise<Product> {
+  const cached = productDetailCache.value.get(product.id)
+  if (cached && !optionsNeedDetail(cached)) return cached
+  if (!optionsNeedDetail(product)) {
+    productDetailCache.value.set(product.id, product)
+    return product
+  }
+
+  const { data } = await api.get<Product>(`/products/${product.id}`)
+  productDetailCache.value.set(product.id, data)
+  const idx = products.value.findIndex((p) => p.id === product.id)
+  if (idx >= 0) products.value[idx] = { ...products.value[idx], ...data }
+  return data
+}
+
+function applyMutation(mutation: TableOrderItemMutation, tempId?: number | null) {
+  if (!order.value) return
+  let items = [...(order.value.items ?? [])]
+
+  if (tempId != null) {
+    items = items.filter((i) => i.id !== tempId)
+  }
+  if (mutation.removedItemId != null) {
+    items = items.filter((i) => i.id !== mutation.removedItemId)
+  }
+  if (mutation.item) {
+    const idx = items.findIndex((i) => i.id === mutation.item!.id)
+    if (idx >= 0) items[idx] = mutation.item
+    else items.push(mutation.item)
+  }
+
+  order.value = {
+    ...order.value,
+    items,
+    total: Number(mutation.total ?? 0),
+    itemCount: Number(mutation.itemCount ?? 0),
+  }
+  checkoutForm.value.amountPaid = Number(mutation.total ?? 0)
+}
+
 async function addProduct(product: Product) {
   if (processing.value) return
   if (!isAvailable(product)) {
@@ -102,10 +151,7 @@ async function addProduct(product: Product) {
   let detailed = product
   if (hasConfigurableOptions(product)) {
     try {
-      const { data } = await api.get<Product>(`/products/${product.id}`)
-      detailed = data
-      const idx = products.value.findIndex((p) => p.id === product.id)
-      if (idx >= 0) products.value[idx] = { ...products.value[idx], ...data }
+      detailed = await resolveProductDetail(product)
     } catch {
       toast.value = { show: true, message: 'No se pudieron cargar las opciones', type: 'error' }
       return
@@ -127,21 +173,63 @@ async function addProduct(product: Product) {
     return
   }
 
-  await persistItem({ productId: detailed.id })
+  await persistItem({ productId: detailed.id }, detailed)
 }
 
-async function persistItem(payload: {
-  productId: number
-  selectedOptionIds?: number[]
-  optionLabel?: string
-  portionScoopCount?: number
-}) {
+async function persistItem(
+  payload: {
+    productId: number
+    selectedOptionIds?: number[]
+    optionLabel?: string
+    portionScoopCount?: number
+  },
+  productHint?: Product,
+) {
+  if (!order.value) return
+
+  const isSimpleAdd = !payload.selectedOptionIds?.length && !payload.portionScoopCount
+  const product = productHint
+    ?? products.value.find((p) => p.id === payload.productId)
+    ?? null
+  let tempId: number | null = null
+  let snapshot: TableOrder | null = null
+
+  if (isSimpleAdd && product) {
+    snapshot = {
+      ...order.value,
+      items: order.value.items.map((i) => ({ ...i })),
+    }
+    tempId = -Date.now()
+    const unitPrice = Number(product.salePrice ?? 0)
+    const tempItem: TableOrderItem = {
+      id: tempId,
+      orderId: order.value.id,
+      productId: product.id,
+      productName: product.name,
+      quantity: 1,
+      unitPrice,
+      selectedOptionIds: null,
+      optionLabel: null,
+      portionScoopCount: null,
+    }
+    order.value = {
+      ...order.value,
+      items: [...order.value.items, tempItem],
+      total: Number((Number(order.value.total) + unitPrice).toFixed(2)),
+      itemCount: Number(order.value.itemCount) + 1,
+    }
+    checkoutForm.value.amountPaid = order.value.total
+  }
+
   processing.value = true
   try {
-    const { data } = await api.post<TableOrder>(`/tables/orders/${orderId.value}/items`, payload)
-    order.value = data
-    checkoutForm.value.amountPaid = Number(data.total ?? 0)
+    const { data } = await api.post<TableOrderItemMutation>(
+      `/tables/orders/${orderId.value}/items`,
+      payload,
+    )
+    applyMutation(data, tempId)
   } catch (e: unknown) {
+    if (snapshot) order.value = snapshot
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo agregar el producto', type: 'error' }
   } finally {
@@ -162,7 +250,7 @@ async function onOptionsConfirm(
     selectedOptionIds,
     optionLabel: label,
     portionScoopCount,
-  })
+  }, optionsProduct.value)
   optionsProduct.value = null
 }
 
@@ -173,12 +261,11 @@ async function updateQuantity(itemId: number, quantity: number) {
   }
   processing.value = true
   try {
-    const { data } = await api.patch<TableOrder>(
+    const { data } = await api.patch<TableOrderItemMutation>(
       `/tables/orders/${orderId.value}/items/${itemId}`,
       { quantity },
     )
-    order.value = data
-    checkoutForm.value.amountPaid = Number(data.total ?? 0)
+    applyMutation(data)
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo actualizar el producto', type: 'error' }
@@ -190,9 +277,10 @@ async function updateQuantity(itemId: number, quantity: number) {
 async function removeItem(itemId: number) {
   processing.value = true
   try {
-    const { data } = await api.delete<TableOrder>(`/tables/orders/${orderId.value}/items/${itemId}`)
-    order.value = data
-    checkoutForm.value.amountPaid = Number(data.total ?? 0)
+    const { data } = await api.delete<TableOrderItemMutation>(
+      `/tables/orders/${orderId.value}/items/${itemId}`,
+    )
+    applyMutation(data)
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo quitar el producto', type: 'error' }

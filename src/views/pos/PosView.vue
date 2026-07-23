@@ -30,6 +30,7 @@ const ticketRef = ref<InstanceType<typeof TicketPrint> | null>(null)
 const toast = ref({ show: false, message: '', type: 'error' as 'success' | 'error' })
 const optionsProduct = ref<Product | null>(null)
 const showOptions = ref(false)
+const productDetailCache = ref<Map<number, Product>>(new Map())
 
 const filtered = computed(() => {
   let list = products.value
@@ -52,6 +53,7 @@ async function loadProducts() {
     products.value = prodRes.data
     categories.value = catRes.data
     customers.value = custRes.data.data
+    productDetailCache.value = new Map()
   } finally {
     loading.value = false
   }
@@ -110,6 +112,29 @@ function hasConfigurableOptions(p: Product): boolean {
   return p.productType === 'portion' && (p.scoopCount ?? 0) > 0
 }
 
+function optionsNeedDetail(p: Product): boolean {
+  if (!hasConfigurableOptions(p)) return false
+  if (!(p.optionGroups?.length ?? 0)) return true
+  return (p.optionGroups ?? []).some((g) =>
+    (g.options ?? []).some((o) => o.ingredientProductId && !o.ingredient),
+  )
+}
+
+async function resolveProductDetail(product: Product): Promise<Product> {
+  const cached = productDetailCache.value.get(product.id)
+  if (cached && !optionsNeedDetail(cached)) return cached
+  if (!optionsNeedDetail(product)) {
+    productDetailCache.value.set(product.id, product)
+    return product
+  }
+
+  const { data } = await api.get<Product>(`/products/${product.id}`)
+  productDetailCache.value.set(product.id, data)
+  const idx = products.value.findIndex((x) => x.id === product.id)
+  if (idx >= 0) products.value[idx] = { ...products.value[idx], ...data }
+  return data
+}
+
 function displayPrice(p: Product): string {
   if (p.variableScoops && p.scoopPrices?.length) {
     const min = Math.min(...p.scoopPrices.map(Number))
@@ -139,15 +164,9 @@ async function handleProductClick(p: Product) {
   }
 
   let product = p
-  const needsOptions = (product.optionGroups?.length ?? 0) > 0
-    || (p.productType === 'portion' && (p.scoopCount ?? 0) > 0)
-
-  if (needsOptions) {
+  if (hasConfigurableOptions(p)) {
     try {
-      const { data } = await api.get<Product>(`/products/${p.id}`)
-      product = data
-      const idx = products.value.findIndex((x) => x.id === p.id)
-      if (idx >= 0) products.value[idx] = { ...products.value[idx], ...data }
+      product = await resolveProductDetail(p)
     } catch {
       toast.value = { show: true, message: 'No se pudo cargar las opciones del producto', type: 'error' }
       return
