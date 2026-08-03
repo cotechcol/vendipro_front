@@ -95,8 +95,11 @@ function hasConfigurableOptions(p: Product): boolean {
 
 function optionsNeedDetail(p: Product): boolean {
   if (!hasConfigurableOptions(p)) return false
-  if (!(p.optionGroups?.length ?? 0)) return true
-  return (p.optionGroups ?? []).some((g) =>
+  const groups = p.optionGroups ?? []
+  if (!groups.length) return true
+  // Catálogo liviano: grupos sin opciones ⇒ cargar detalle al tocar
+  if (groups.some((g) => !g.options?.length)) return true
+  return groups.some((g) =>
     (g.options ?? []).some((o) => o.ingredientProductId && !o.ingredient),
   )
 }
