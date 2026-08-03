@@ -26,6 +26,7 @@ const router = createRouter({
         { path: 'suppliers', name: 'suppliers', component: () => import('@/views/suppliers/SuppliersView.vue'), meta: { adminOnly: true } },
         { path: 'purchases', name: 'purchases', component: () => import('@/views/purchases/PurchasesView.vue'), meta: { adminOnly: true } },
         { path: 'cash', name: 'cash', component: () => import('@/views/cash/CashSessionView.vue') },
+        { path: 'sales', name: 'sales', component: () => import('@/views/sales/SalesView.vue'), meta: { adminOnly: true } },
         { path: 'reports', name: 'reports', component: () => import('@/views/reports/ReportsView.vue') },
         { path: 'stores', name: 'stores', component: () => import('@/views/stores/StoresView.vue'), meta: { superAdminOnly: true } },
         { path: 'users', name: 'users', component: () => import('@/views/users/UsersView.vue'), meta: { adminOnly: true } },

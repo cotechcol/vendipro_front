@@ -24,6 +24,7 @@ const navItems = [
   { to: '/suppliers', label: 'Proveedores', icon: '▥', roles: ['super_admin', 'admin'] },
   { to: '/purchases', label: 'Compras', icon: '◉', roles: ['super_admin', 'admin'] },
   { to: '/cash', label: 'Caja', icon: '◆', roles: ['super_admin', 'admin', 'cashier'] },
+  { to: '/sales', label: 'Ventas', icon: '◈', roles: ['super_admin', 'admin'] },
   { to: '/reports', label: 'Reportes', icon: '▲', roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/stores', label: 'Tiendas', icon: '▦', roles: ['super_admin'] },
   { to: '/users', label: 'Usuarios', icon: '●', roles: ['super_admin', 'admin'] },
