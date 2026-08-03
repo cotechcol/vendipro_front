@@ -37,6 +37,7 @@ interface SaleRow {
   total: number
   profit: number
   paymentMethod: string
+  status?: 'completed' | 'reversed'
   createdAt: string
   customer?: { name: string }
 }
@@ -328,12 +329,22 @@ onMounted(loadHistory)
         <div v-else class="max-h-64 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
           <div v-for="sale in detailSales" :key="sale.id" class="flex justify-between items-center px-4 py-3 hover:bg-slate-50 text-sm">
             <div>
-              <p class="font-mono text-xs text-brand-700">{{ sale.ticketNumber }}</p>
+              <p class="font-mono text-xs text-brand-700">
+                {{ sale.ticketNumber }}
+                <span
+                  v-if="sale.status === 'reversed'"
+                  class="ml-1.5 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-600"
+                >Anulada</span>
+              </p>
               <p class="text-xs text-slate-400">{{ formatDate(sale.createdAt) }} · {{ paymentLabels[sale.paymentMethod] || sale.paymentMethod }}</p>
             </div>
             <div class="text-right">
-              <p class="font-semibold">{{ formatMoney(sale.total) }}</p>
-              <p class="text-xs text-emerald-600">+{{ formatMoney(sale.profit) }}</p>
+              <p class="font-semibold" :class="sale.status === 'reversed' ? 'line-through text-slate-400' : ''">
+                {{ formatMoney(sale.total) }}
+              </p>
+              <p class="text-xs" :class="sale.status === 'reversed' ? 'text-slate-400' : 'text-emerald-600'">
+                +{{ formatMoney(sale.profit) }}
+              </p>
             </div>
           </div>
         </div>

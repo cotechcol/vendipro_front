@@ -116,6 +116,32 @@ async function resolveProductDetail(product: Product): Promise<Product> {
   return data
 }
 
+const qtySyncTimers = new Map<number, ReturnType<typeof setTimeout>>()
+const qtySyncTargets = new Map<number, number>()
+
+function cloneOrder(source: TableOrder): TableOrder {
+  return {
+    ...source,
+    items: (source.items ?? []).map((i) => ({ ...i })),
+  }
+}
+
+function recomputeLocalTotals(items: TableOrderItem[]) {
+  const total = items.reduce((sum, i) => sum + Number(i.unitPrice) * Number(i.quantity), 0)
+  const itemCount = items.reduce((sum, i) => sum + Number(i.quantity), 0)
+  return {
+    total: Number(total.toFixed(2)),
+    itemCount,
+  }
+}
+
+function setOrderItems(items: TableOrderItem[]) {
+  if (!order.value) return
+  const { total, itemCount } = recomputeLocalTotals(items)
+  order.value = { ...order.value, items, total, itemCount }
+  checkoutForm.value.amountPaid = total
+}
+
 function applyMutation(mutation: TableOrderItemMutation, tempId?: number | null) {
   if (!order.value) return
   let items = [...(order.value.items ?? [])]
@@ -141,8 +167,27 @@ function applyMutation(mutation: TableOrderItemMutation, tempId?: number | null)
   checkoutForm.value.amountPaid = Number(mutation.total ?? 0)
 }
 
+async function reloadOrderQuiet() {
+  try {
+    const { data } = await api.get<TableOrder>(`/tables/orders/${orderId.value}`)
+    order.value = data
+    checkoutForm.value.amountPaid = Number(data.total ?? 0)
+  } catch {
+    /* ignore */
+  }
+}
+
+function findExistingSimpleLine(productId: number) {
+  return (order.value?.items ?? []).find((i) => (
+    i.id > 0
+    && i.productId === productId
+    && !(i.selectedOptionIds?.length)
+    && !i.portionScoopCount
+  ))
+}
+
 async function addProduct(product: Product) {
-  if (processing.value) return
+  if (!isOpenOrder.value) return
   if (!isAvailable(product)) {
     toast.value = { show: true, message: 'Sin stock disponible para vender', type: 'error' }
     return
@@ -173,7 +218,13 @@ async function addProduct(product: Product) {
     return
   }
 
-  await persistItem({ productId: detailed.id }, detailed)
+  const existing = findExistingSimpleLine(detailed.id)
+  if (existing) {
+    updateQuantity(existing.id, Number(existing.quantity) + 1)
+    return
+  }
+
+  void persistItem({ productId: detailed.id }, detailed)
 }
 
 async function persistItem(
@@ -195,10 +246,7 @@ async function persistItem(
   let snapshot: TableOrder | null = null
 
   if (isSimpleAdd && product) {
-    snapshot = {
-      ...order.value,
-      items: order.value.items.map((i) => ({ ...i })),
-    }
+    snapshot = cloneOrder(order.value)
     tempId = -Date.now()
     const unitPrice = Number(product.salePrice ?? 0)
     const tempItem: TableOrderItem = {
@@ -212,16 +260,9 @@ async function persistItem(
       optionLabel: null,
       portionScoopCount: null,
     }
-    order.value = {
-      ...order.value,
-      items: [...order.value.items, tempItem],
-      total: Number((Number(order.value.total) + unitPrice).toFixed(2)),
-      itemCount: Number(order.value.itemCount) + 1,
-    }
-    checkoutForm.value.amountPaid = order.value.total
+    setOrderItems([...order.value.items, tempItem])
   }
 
-  processing.value = true
   try {
     const { data } = await api.post<TableOrderItemMutation>(
       `/tables/orders/${orderId.value}/items`,
@@ -232,8 +273,6 @@ async function persistItem(
     if (snapshot) order.value = snapshot
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo agregar el producto', type: 'error' }
-  } finally {
-    processing.value = false
   }
 }
 
@@ -254,38 +293,72 @@ async function onOptionsConfirm(
   optionsProduct.value = null
 }
 
-async function updateQuantity(itemId: number, quantity: number) {
+function updateQuantity(itemId: number, quantity: number) {
   if (quantity <= 0) {
-    await removeItem(itemId)
+    void removeItem(itemId)
     return
   }
-  processing.value = true
+  if (!order.value || itemId <= 0) return
+
+  const item = order.value.items.find((i) => i.id === itemId)
+  if (!item) return
+
+  setOrderItems(
+    order.value.items.map((i) => (i.id === itemId ? { ...i, quantity } : i)),
+  )
+
+  qtySyncTargets.set(itemId, quantity)
+  const prev = qtySyncTimers.get(itemId)
+  if (prev) clearTimeout(prev)
+  qtySyncTimers.set(
+    itemId,
+    setTimeout(() => {
+      void flushQuantity(itemId)
+    }, 140),
+  )
+}
+
+async function flushQuantity(itemId: number) {
+  const quantity = qtySyncTargets.get(itemId)
+  qtySyncTimers.delete(itemId)
+  if (quantity == null) return
+  qtySyncTargets.delete(itemId)
+
   try {
     const { data } = await api.patch<TableOrderItemMutation>(
       `/tables/orders/${orderId.value}/items/${itemId}`,
       { quantity },
     )
-    applyMutation(data)
+    // Solo aplica si no hay otro cambio pendiente más reciente
+    if (!qtySyncTargets.has(itemId)) {
+      applyMutation(data)
+    }
   } catch (e: unknown) {
+    await reloadOrderQuiet()
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo actualizar el producto', type: 'error' }
-  } finally {
-    processing.value = false
   }
 }
 
 async function removeItem(itemId: number) {
-  processing.value = true
+  if (!order.value || itemId <= 0) return
+  const snapshot = cloneOrder(order.value)
+  const prevTimer = qtySyncTimers.get(itemId)
+  if (prevTimer) clearTimeout(prevTimer)
+  qtySyncTimers.delete(itemId)
+  qtySyncTargets.delete(itemId)
+
+  setOrderItems(order.value.items.filter((i) => i.id !== itemId))
+
   try {
     const { data } = await api.delete<TableOrderItemMutation>(
       `/tables/orders/${orderId.value}/items/${itemId}`,
     )
     applyMutation(data)
   } catch (e: unknown) {
+    order.value = snapshot
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo quitar el producto', type: 'error' }
-  } finally {
-    processing.value = false
   }
 }
 
@@ -420,7 +493,7 @@ onMounted(load)
             v-for="p in filteredProducts"
             :key="p.id"
             class="bg-white rounded-xl border border-slate-200 p-4 text-left hover:border-primary-300 hover:shadow-sm transition disabled:opacity-50"
-            :disabled="processing || !isAvailable(p)"
+            :disabled="!isOpenOrder || !isAvailable(p)"
             @click="addProduct(p)"
           >
             <p class="font-semibold text-sm text-slate-900 line-clamp-2">{{ p.name }}</p>
@@ -458,11 +531,11 @@ onMounted(load)
               </p>
             </div>
             <div class="flex items-center gap-1">
-              <button :disabled="processing" class="w-7 h-7 bg-white border rounded" @click="updateQuantity(item.id, item.quantity - 1)">-</button>
+              <button class="w-7 h-7 bg-white border rounded" :disabled="!isOpenOrder || item.id <= 0" @click="updateQuantity(item.id, item.quantity - 1)">-</button>
               <span class="w-7 text-center text-sm font-medium">{{ item.quantity }}</span>
-              <button :disabled="processing" class="w-7 h-7 bg-white border rounded" @click="updateQuantity(item.id, item.quantity + 1)">+</button>
+              <button class="w-7 h-7 bg-white border rounded" :disabled="!isOpenOrder || item.id <= 0" @click="updateQuantity(item.id, item.quantity + 1)">+</button>
             </div>
-            <button :disabled="processing" class="text-red-400 px-1" @click="removeItem(item.id)">&times;</button>
+            <button class="text-red-400 px-1" :disabled="!isOpenOrder || item.id <= 0" @click="removeItem(item.id)">&times;</button>
           </div>
         </div>
 

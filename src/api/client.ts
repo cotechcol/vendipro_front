@@ -16,11 +16,14 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-function trackLoading(config: { method?: string; url?: string }, start: boolean) {
+function trackLoading(config: { method?: string; url?: string; skipLoading?: boolean }, start: boolean) {
+  if (config.skipLoading) return
   const method = config.method?.toLowerCase()
   if (!method || !MUTATING_METHODS.has(method)) return
-  const store = useLoadingStore()
   const url = config.url || ''
+  // Mutaciones de ítems de mesa son frecuentes: no mostrar overlay global
+  if (/\/tables\/orders\/[^/]+\/items/.test(url)) return
+  const store = useLoadingStore()
   if (start) store.start(url)
   else store.stop()
 }

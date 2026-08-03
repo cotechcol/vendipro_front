@@ -6,6 +6,8 @@ import api from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
+import AppModal from '@/components/AppModal.vue'
+import Toast from '@/components/Toast.vue'
 import { formatMoney, formatDate, todayColombia, daysAgoColombia } from '@/utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler)
@@ -15,13 +17,28 @@ const tab = ref<'sales' | 'products' | 'profitability'>('sales')
 const from = ref(getWeekAgo())
 const to = ref(today())
 const loading = ref(false)
+const reversing = ref(false)
 
 const salesReport = ref<{ sales: SaleRow[]; summary: Summary } | null>(null)
 const productsReport = ref<{ products: ProductRow[]; summary: ProductSummary } | null>(null)
 const profitability = ref<{ revenue: number; cost: number; profit: number; margin: number; salesCount: number } | null>(null)
 const dailySales = ref<{ date: string; revenue: number; profit: number; count: number }[]>([])
 
-interface SaleRow { id: number; ticketNumber: string; total: number; profit: number; createdAt: string; user?: { name: string } }
+const showReverseModal = ref(false)
+const reverseSale = ref<SaleRow | null>(null)
+const reverseReason = ref('')
+const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
+
+interface SaleRow {
+  id: number
+  ticketNumber: string
+  total: number
+  profit: number
+  status?: 'completed' | 'reversed'
+  reverseReason?: string | null
+  createdAt: string
+  user?: { name: string }
+}
 interface Summary { count: number; revenue: number; profit: number; tax: number }
 interface ProductRow { name: string; category: string; quantity: number; revenue: number; cost: number; profit: number; margin: number }
 interface ProductSummary { totalProducts: number; totalUnits: number; revenue: number; profit: number }
@@ -132,9 +149,16 @@ function exportCsv(rows: string[][], filename: string) {
 
 function exportSales() {
   if (!salesReport.value) return
-  const rows = [['Ticket', 'Fecha', 'Total', 'Ganancia', 'Cajero']]
+  const rows = [['Ticket', 'Fecha', 'Estado', 'Total', 'Ganancia', 'Cajero']]
   for (const s of salesReport.value.sales) {
-    rows.push([s.ticketNumber, s.createdAt, String(s.total), String(s.profit), s.user?.name || ''])
+    rows.push([
+      s.ticketNumber,
+      s.createdAt,
+      s.status === 'reversed' ? 'Anulada' : 'Completada',
+      String(s.total),
+      String(s.profit),
+      s.user?.name || '',
+    ])
   }
   exportCsv(rows, `ventas-${from.value}-${to.value}.csv`)
 }
@@ -146,6 +170,34 @@ function exportProducts() {
     rows.push([p.name, p.category, String(p.quantity), String(p.revenue), String(p.cost), String(p.profit), String(p.margin)])
   }
   exportCsv(rows, `productos-${from.value}-${to.value}.csv`)
+}
+
+function openReverse(sale: SaleRow) {
+  reverseSale.value = sale
+  reverseReason.value = ''
+  showReverseModal.value = true
+}
+
+async function confirmReverse() {
+  if (!reverseSale.value) return
+  reversing.value = true
+  try {
+    await api.post(`/sales/${reverseSale.value.id}/reverse`, {
+      reason: reverseReason.value.trim() || undefined,
+    })
+    showReverseModal.value = false
+    toast.value = { show: true, message: `Venta ${reverseSale.value.ticketNumber} anulada`, type: 'success' }
+    await loadTab()
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+    toast.value = {
+      show: true,
+      message: Array.isArray(msg) ? msg.join(', ') : (msg || 'No se pudo anular la venta'),
+      type: 'error',
+    }
+  } finally {
+    reversing.value = false
+  }
 }
 
 watch(tab, loadTab)
@@ -167,7 +219,6 @@ onMounted(loadTab)
       </template>
     </PageHeader>
 
-    <!-- Tabs -->
     <div class="flex gap-1 bg-slate-100/80 p-1 rounded-xl w-fit mb-6 overflow-x-auto">
       <button
         v-for="t in tabs"
@@ -182,7 +233,6 @@ onMounted(loadTab)
 
     <div v-if="loading" class="flex justify-center py-20 text-slate-400">Cargando reporte...</div>
 
-    <!-- SALES TAB -->
     <template v-else-if="tab === 'sales' && salesReport">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Transacciones" :value="salesReport.summary.count" icon="🧾" color="brand" />
@@ -214,15 +264,40 @@ onMounted(loadTab)
                 <th class="text-left px-6 py-3 font-medium hidden sm:table-cell">Cajero</th>
                 <th class="text-right px-6 py-3 font-medium">Total</th>
                 <th class="text-right px-6 py-3 font-medium">Ganancia</th>
+                <th v-if="auth.isAdmin" class="text-right px-6 py-3 font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="s in salesReport.sales" :key="s.id" class="hover:bg-slate-50/50">
-                <td class="px-6 py-3 font-mono text-xs text-brand-700">{{ s.ticketNumber }}</td>
+              <tr
+                v-for="s in salesReport.sales"
+                :key="s.id"
+                :class="['hover:bg-slate-50/50', s.status === 'reversed' ? 'opacity-60' : '']"
+              >
+                <td class="px-6 py-3 font-mono text-xs text-brand-700">
+                  <span>{{ s.ticketNumber }}</span>
+                  <span
+                    v-if="s.status === 'reversed'"
+                    class="ml-2 inline-flex text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-600"
+                  >Anulada</span>
+                </td>
                 <td class="px-6 py-3 text-slate-500">{{ formatDate(s.createdAt) }}</td>
                 <td class="px-6 py-3 hidden sm:table-cell">{{ s.user?.name || '—' }}</td>
-                <td class="px-6 py-3 text-right font-semibold">{{ formatMoney(Number(s.total)) }}</td>
-                <td class="px-6 py-3 text-right text-emerald-600">{{ formatMoney(Number(s.profit)) }}</td>
+                <td class="px-6 py-3 text-right font-semibold" :class="s.status === 'reversed' ? 'line-through text-slate-400' : ''">
+                  {{ formatMoney(Number(s.total)) }}
+                </td>
+                <td class="px-6 py-3 text-right" :class="s.status === 'reversed' ? 'text-slate-400 line-through' : 'text-emerald-600'">
+                  {{ formatMoney(Number(s.profit)) }}
+                </td>
+                <td v-if="auth.isAdmin" class="px-6 py-3 text-right">
+                  <button
+                    v-if="s.status !== 'reversed'"
+                    class="text-xs font-medium text-red-600 hover:text-red-700 hover:underline"
+                    @click="openReverse(s)"
+                  >
+                    Anular
+                  </button>
+                  <span v-else class="text-xs text-slate-400" :title="s.reverseReason || ''">—</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -230,7 +305,6 @@ onMounted(loadTab)
       </div>
     </template>
 
-    <!-- PRODUCTS TAB -->
     <template v-else-if="tab === 'products' && productsReport">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Productos vendidos" :value="productsReport.summary.totalProducts" icon="▣" color="brand" />
@@ -287,7 +361,6 @@ onMounted(loadTab)
       </div>
     </template>
 
-    <!-- PROFITABILITY TAB -->
     <template v-else-if="tab === 'profitability' && profitability">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Ingresos" :value="formatMoney(profitability.revenue)" icon="💵" color="brand" />
@@ -308,5 +381,41 @@ onMounted(loadTab)
         </div>
       </div>
     </template>
+
+    <AppModal
+      :show="showReverseModal"
+      title="Anular venta"
+      size="sm"
+      @close="showReverseModal = false"
+    >
+      <div v-if="reverseSale" class="space-y-4">
+        <p class="text-sm text-slate-600">
+          Vas a anular el ticket
+          <span class="font-mono font-semibold text-brand-700">{{ reverseSale.ticketNumber }}</span>
+          por {{ formatMoney(Number(reverseSale.total)) }}. Se restaurará el inventario.
+        </p>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Motivo (opcional)</label>
+          <input
+            v-model="reverseReason"
+            class="input mt-1.5"
+            maxlength="500"
+            placeholder="Ej. cobro duplicado, error de producto..."
+          />
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn-ghost" :disabled="reversing" @click="showReverseModal = false">Cancelar</button>
+        <button
+          class="btn-primary !bg-red-600 hover:!bg-red-700"
+          :disabled="reversing"
+          @click="confirmReverse"
+        >
+          {{ reversing ? 'Anulando...' : 'Confirmar anulación' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <Toast v-if="toast.show" :message="toast.message" :type="toast.type" @close="toast.show = false" />
   </div>
 </template>

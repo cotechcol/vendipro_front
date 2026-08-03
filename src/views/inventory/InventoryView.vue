@@ -82,6 +82,7 @@ const typeLabels: Record<string, string> = {
   adjustment_in: 'Entrada',
   adjustment_out: 'Salida',
   production: 'Producción',
+  sale_reversal: 'Anulación venta',
 }
 
 const typeStyles: Record<string, string> = {
@@ -90,6 +91,7 @@ const typeStyles: Record<string, string> = {
   adjustment_in: 'bg-blue-100 text-blue-700',
   adjustment_out: 'bg-orange-100 text-orange-700',
   production: 'bg-teal-100 text-teal-700',
+  sale_reversal: 'bg-violet-100 text-violet-700',
 }
 
 function stockStatus(p: Product): 'ok' | 'low' | 'out' {

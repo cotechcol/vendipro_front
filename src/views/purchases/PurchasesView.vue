@@ -6,7 +6,7 @@ import AppModal from '@/components/AppModal.vue'
 import StatCard from '@/components/StatCard.vue'
 import Toast from '@/components/Toast.vue'
 import type { Supplier, Product } from '@/types'
-import { formatMoney, formatDate, toNumber } from '@/utils/format'
+import { formatMoney, formatDate, toNumber, productTypeLabel } from '@/utils/format'
 
 interface PurchaseItem { productId: number; quantity: number; unitCost: number }
 interface Purchase {
@@ -41,7 +41,7 @@ const totalSpent = computed(() =>
   purchases.value.reduce((sum, p) => sum + toNumber(p.total), 0),
 )
 const purchasableProducts = computed(() =>
-  products.value.filter((p) => p.productType === 'simple' || p.productType === 'bulk'),
+  products.value.filter((p) => p.active !== false),
 )
 const formTotal = computed(() =>
   form.value.items.reduce((sum, item) => sum + item.quantity * item.unitCost, 0),
@@ -55,7 +55,7 @@ async function load() {
     const [purRes, supRes, prodRes] = await Promise.all([
       api.get('/purchases', { params }),
       api.get('/suppliers', { params: { limit: 100 } }),
-      api.get('/products', { params: { limit: 100 } }),
+      api.get('/products', { params: { limit: 1000 } }),
     ])
     purchases.value = purRes.data.data
     suppliers.value = supRes.data.data
@@ -231,7 +231,7 @@ onMounted(load)
                 >
                   <option :value="0" disabled>Seleccionar...</option>
                   <option v-for="p in purchasableProducts" :key="p.id" :value="p.id">
-                    {{ p.name }} ({{ p.sku }}){{ p.productType === 'bulk' ? ` — ${p.stockUnit}` : '' }}
+                    {{ p.name }} ({{ p.sku }}) — {{ productTypeLabel(p.productType) }}{{ p.stockUnit && p.stockUnit !== 'unit' ? ` · ${p.stockUnit}` : '' }}
                   </option>
                 </select>
               </div>

@@ -160,12 +160,15 @@ export interface Sale {
   total: number
   profit: number
   paymentMethod: 'cash' | 'card' | 'mixed'
+  status?: 'completed' | 'reversed'
   amountPaid?: number
   change?: number
   customerId?: number
   customer?: Customer
   user?: User
   items: SaleItem[]
+  reverseReason?: string | null
+  reversedAt?: string | null
   createdAt: string
 }
 
