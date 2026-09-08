@@ -6,7 +6,7 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { Product, Category, ProductType, StockUnit, ProductRecipe } from '@/types'
-import { formatMoney, formatStock, productTypeLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
+import { formatMoney, formatStock, productTypeLabel, stockUnitLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
 
 type NameRow = { name: string }
 
@@ -206,7 +206,7 @@ async function load() {
   loading.value = true
   try {
     const [prodRes, catRes, bulkRes] = await Promise.all([
-      api.get('/products', { params: { limit: 200 } }),
+      api.get('/products', { params: { limit: 1000 } }),
       api.get('/categories/active'),
       api.get('/products/bulk'),
     ])
@@ -215,6 +215,78 @@ async function load() {
     bulkProducts.value = bulkRes.data
   } finally {
     loading.value = false
+  }
+}
+
+function csvEscape(value: string | number | null | undefined): string {
+  const raw = value == null ? '' : String(value)
+  if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`
+  return raw
+}
+
+function exportProductsCsv() {
+  const rows = filtered.value
+  if (!rows.length) {
+    toast.value = { show: true, message: 'No hay productos para exportar con el filtro actual', type: 'error' }
+    return
+  }
+
+  const header = [
+    'SKU',
+    'Nombre',
+    'Tipo',
+    'Categoría',
+    'Unidad',
+    'Precio costo',
+    'Precio venta',
+    'Margen %',
+    'Stock',
+    'Stock mín.',
+    'Disponibles (POS)',
+    'Visible POS',
+    'Activo',
+    'Insumo base',
+    'Tamaño porción',
+    'Descripción',
+  ]
+
+  const lines = [header.map(csvEscape).join(',')]
+  for (const p of rows) {
+    const cost = Number(p.costPrice ?? 0)
+    const sale = Number(p.salePrice ?? 0)
+    const margin = sale > 0 ? Number((((sale - cost) / sale) * 100).toFixed(1)) : ''
+    const noSale = p.productType === 'bulk' || p.productType === 'prepared'
+    lines.push([
+      csvEscape(p.sku),
+      csvEscape(p.name),
+      csvEscape(productTypeLabel(p.productType)),
+      csvEscape(p.category?.name || ''),
+      csvEscape(stockUnitLabel(p.stockUnit || 'unit')),
+      csvEscape(cost.toFixed(2)),
+      csvEscape(noSale ? '' : sale.toFixed(2)),
+      csvEscape(noSale || margin === '' ? '' : margin),
+      csvEscape(p.productType === 'portion' || p.productType === 'composite' ? '' : Number(p.stock)),
+      csvEscape(p.productType === 'portion' || p.productType === 'composite' ? '' : Number(p.minStock)),
+      csvEscape(p.sellableUnits ?? ''),
+      csvEscape(p.visibleInPos === false ? 'No' : 'Sí'),
+      csvEscape(p.active === false ? 'No' : 'Sí'),
+      csvEscape(p.baseProduct?.name || ''),
+      csvEscape(p.portionSize ?? ''),
+      csvEscape(p.description || ''),
+    ].join(','))
+  }
+
+  const typeSlug = typeFilter.value || 'todos'
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `productos-${typeSlug}-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+  toast.value = {
+    show: true,
+    message: `${rows.length} producto${rows.length === 1 ? '' : 's'} exportado${rows.length === 1 ? '' : 's'}`,
+    type: 'success',
   }
 }
 
@@ -573,7 +645,16 @@ onMounted(load)
   <div>
     <PageHeader title="Productos" subtitle="Unidades, insumos base, porciones y compuestos">
       <template #actions>
-        <button v-if="auth.isAdmin" class="btn-primary" @click="openCreate">+ Nuevo producto</button>
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="btn-secondary"
+            :disabled="loading || filtered.length === 0"
+            @click="exportProductsCsv"
+          >
+            ↓ Exportar CSV
+          </button>
+          <button v-if="auth.isAdmin" class="btn-primary" @click="openCreate">+ Nuevo producto</button>
+        </div>
       </template>
     </PageHeader>
 
