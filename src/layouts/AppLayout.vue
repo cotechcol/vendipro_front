@@ -63,8 +63,7 @@ async function loadStoreData() {
   const hasStore = auth.user?.storeId || storeStore.activeStoreId
   if (!hasStore && auth.isSuperAdmin) return
   try {
-    await app.fetchSettings()
-    await app.fetchCashSession()
+    await Promise.all([app.fetchSettings(), app.fetchCashSession()])
   } catch {
     /* store not selected yet */
   }
