@@ -375,6 +375,7 @@ async function openEdit(p: Product) {
   try {
     const { data } = await api.get<Product>(`/products/${p.id}`)
     product = data
+    editingImageUrl.value = data.imageUrl ?? editingImageUrl.value
   } catch {
     // Usar datos del listado si falla la carga detallada
   }
