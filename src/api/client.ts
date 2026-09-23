@@ -1,6 +1,12 @@
 import axios from 'axios'
 import { useLoadingStore } from '@/stores/loading'
 
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    skipLoading?: boolean
+  }
+}
+
 const MUTATING_METHODS = new Set(['post', 'patch', 'put', 'delete'])
 
 /** Backend en Vercel usa prefijo /api; normaliza URLs de producción mal configuradas */

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/api/client'
 import AppModal from '@/components/AppModal.vue'
 import ProductOptionsModal from '@/components/ProductOptionsModal.vue'
+import ProductImage from '@/components/ProductImage.vue'
 import TicketPrint from '@/components/TicketPrint.vue'
 import Toast from '@/components/Toast.vue'
 import { useAppStore } from '@/stores/app'
@@ -495,13 +496,20 @@ onMounted(load)
           <button
             v-for="p in filteredProducts"
             :key="p.id"
-            class="bg-white rounded-xl border border-slate-200 p-4 text-left hover:border-primary-300 hover:shadow-sm transition disabled:opacity-50"
+            class="bg-white rounded-xl border border-slate-200 p-3 text-left hover:border-primary-300 hover:shadow-sm transition disabled:opacity-50"
             :disabled="!isOpenOrder || !isAvailable(p)"
             @click="addProduct(p)"
           >
+            <ProductImage
+              :product-id="p.id"
+              :image-url="p.imageUrl"
+              :has-image="p.hasImage || !!p.imageUrl"
+              :alt="p.name"
+              class="w-full aspect-square rounded-lg mb-2"
+            />
             <p class="font-semibold text-sm text-slate-900 line-clamp-2">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
-            <div class="flex justify-between items-end mt-4">
+            <div class="flex justify-between items-end mt-3">
               <span class="font-bold text-primary-700">{{ formatMoney(Number(p.salePrice)) }}</span>
               <span class="text-[11px]" :class="isAvailable(p) ? 'text-emerald-600' : 'text-red-500'">
                 {{ isAvailable(p) ? `${sellableCount(p)} disp.` : 'Agotado' }}

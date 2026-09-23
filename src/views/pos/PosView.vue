@@ -8,6 +8,7 @@ import Toast from '@/components/Toast.vue'
 import TicketPrint from '@/components/TicketPrint.vue'
 import CartPanel from '@/components/CartPanel.vue'
 import ProductOptionsModal from '@/components/ProductOptionsModal.vue'
+import ProductImage from '@/components/ProductImage.vue'
 import type { Product, Category, Customer, Sale, Setting } from '@/types'
 
 import { formatMoney } from '@/utils/format'
@@ -267,9 +268,14 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             ]"
             @click="handleProductClick(p)"
           >
-            <div class="w-full aspect-square rounded-lg bg-slate-100 mb-2 overflow-hidden flex items-center justify-center">
-              <img v-if="p.imageUrl" :src="p.imageUrl" :alt="p.name" class="w-full h-full object-cover" />
-              <span v-else class="text-3xl text-slate-300">📦</span>
+            <div class="w-full aspect-square rounded-lg bg-slate-100 mb-2 overflow-hidden">
+              <ProductImage
+                :product-id="p.id"
+                :image-url="p.imageUrl"
+                :has-image="p.hasImage || !!p.imageUrl"
+                :alt="p.name"
+                class="w-full h-full"
+              />
             </div>
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>

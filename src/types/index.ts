@@ -88,6 +88,8 @@ export interface Product {
   active: boolean
   visibleInPos?: boolean
   imageUrl?: string
+  /** true si hay foto en Storage (aunque imageUrl no venga en el listado) */
+  hasImage?: boolean
 }
 
 export interface Customer {

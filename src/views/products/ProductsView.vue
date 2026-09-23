@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ProductImage from '@/components/ProductImage.vue'
 import type { Product, Category, ProductType, StockUnit, ProductRecipe } from '@/types'
 import { formatMoney, formatStock, productTypeLabel, stockUnitLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
 
@@ -692,10 +693,13 @@ onMounted(load)
             <tr v-else-if="filtered.length === 0"><td colspan="9" class="px-4 py-8 text-center text-slate-400">Sin productos</td></tr>
             <tr v-for="p in filtered" :key="p.id" class="border-t border-slate-100 hover:bg-slate-50">
               <td class="px-4 py-3">
-                <div class="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
-                  <img v-if="p.imageUrl" :src="p.imageUrl" :alt="p.name" class="w-full h-full object-cover" />
-                  <span v-else class="text-slate-300 text-lg">📦</span>
-                </div>
+                <ProductImage
+                  :product-id="p.id"
+                  :image-url="p.imageUrl"
+                  :has-image="p.hasImage || !!p.imageUrl"
+                  :alt="p.name"
+                  class="w-10 h-10 rounded-lg border border-slate-200 shrink-0"
+                />
               </td>
               <td class="px-4 py-3 font-mono text-xs">{{ p.sku }}</td>
               <td class="px-4 py-3 font-medium">{{ p.name }}</td>
