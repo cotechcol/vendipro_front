@@ -696,7 +696,7 @@ onMounted(load)
                 <ProductImage
                   :product-id="p.id"
                   :image-url="p.imageUrl"
-                  :has-image="p.hasImage || !!p.imageUrl"
+                  :has-image="p.hasImage"
                   :alt="p.name"
                   class="w-10 h-10 rounded-lg border border-slate-200 shrink-0"
                 />

@@ -503,7 +503,7 @@ onMounted(load)
             <ProductImage
               :product-id="p.id"
               :image-url="p.imageUrl"
-              :has-image="p.hasImage || !!p.imageUrl"
+              :has-image="p.hasImage"
               :alt="p.name"
               class="w-full aspect-square rounded-lg mb-2"
             />
