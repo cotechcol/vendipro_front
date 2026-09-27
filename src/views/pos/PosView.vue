@@ -77,7 +77,7 @@ async function checkout() {
       })),
       customerId: cart.customerId || undefined,
       paymentMethod: cart.paymentMethod,
-      amountPaid: cart.paymentMethod === 'card' ? undefined : cart.amountPaid,
+      amountPaid: cart.paymentMethod === 'cash' || cart.paymentMethod === 'mixed' ? cart.amountPaid : undefined,
     })
     const ticketRes = await api.get(`/sales/${data.id}/ticket`)
     lastSale.value = ticketRes.data.sale

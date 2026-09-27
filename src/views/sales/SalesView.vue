@@ -20,7 +20,7 @@ interface SaleRow {
   total: number
   taxAmount?: number
   profit: number
-  paymentMethod?: 'cash' | 'card' | 'mixed'
+  paymentMethod?: 'cash' | 'card' | 'mixed' | 'nequi'
   status?: 'completed' | 'reversed'
   reverseReason?: string | null
   reversedAt?: string | null
@@ -56,6 +56,7 @@ const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'er
 const paymentLabels: Record<string, string> = {
   cash: 'Efectivo',
   card: 'Tarjeta',
+  nequi: 'Nequi',
   mixed: 'Mixto',
 }
 

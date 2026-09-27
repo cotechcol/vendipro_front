@@ -15,6 +15,7 @@ interface SessionSummary {
   totalProfit: number
   cashTotal?: number
   cardTotal: number
+  nequiTotal?: number
 }
 
 interface CashSessionRow {
@@ -125,7 +126,7 @@ function diffClass(diff: number) {
 }
 
 const paymentLabels: Record<string, string> = {
-  cash: 'Efectivo', card: 'Tarjeta', mixed: 'Mixto',
+  cash: 'Efectivo', card: 'Tarjeta', nequi: 'Nequi', mixed: 'Mixto',
 }
 
 onMounted(loadHistory)
@@ -155,7 +156,7 @@ onMounted(loadHistory)
         </div>
       </div>
       <div class="p-6">
-        <div class="grid grid-cols-2 gap-4" :class="auth.isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-3'">
+        <div class="grid grid-cols-2 gap-4" :class="auth.isAdmin ? 'lg:grid-cols-6' : 'lg:grid-cols-3'">
           <div>
             <p class="text-xs text-slate-500 uppercase tracking-wide">Fondo inicial</p>
             <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(app.cashSession.openingAmount) }}</p>
@@ -171,6 +172,10 @@ onMounted(loadHistory)
           <div v-if="currentSummary && auth.isAdmin">
             <p class="text-xs text-slate-500 uppercase tracking-wide">Efectivo</p>
             <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(currentSummary.cashTotal ?? 0) }}</p>
+          </div>
+          <div v-if="currentSummary && auth.isAdmin">
+            <p class="text-xs text-slate-500 uppercase tracking-wide">Nequi</p>
+            <p class="text-xl font-bold text-slate-900 mt-1">{{ formatMoney(currentSummary.nequiTotal ?? 0) }}</p>
           </div>
           <div v-if="currentSummary && auth.isAdmin">
             <p class="text-xs text-slate-500 uppercase tracking-wide">Esperado en caja</p>
@@ -308,6 +313,7 @@ onMounted(loadHistory)
           <StatCard title="Ingresos" :value="formatMoney(detailSummary.totalRevenue)" icon="💵" color="blue" />
           <StatCard title="Efectivo" :value="formatMoney(detailSummary.cashTotal ?? 0)" icon="◆" color="amber" />
           <StatCard title="Tarjeta" :value="formatMoney(detailSummary.cardTotal)" icon="💳" color="purple" />
+          <StatCard title="Nequi" :value="formatMoney(detailSummary.nequiTotal ?? 0)" icon="📱" color="brand" />
         </div>
 
         <div class="bg-slate-50 rounded-xl p-4 mb-6 grid grid-cols-2 gap-3 text-sm">

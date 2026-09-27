@@ -39,9 +39,10 @@ const cart = useCartStore()
       <select v-model="cart.paymentMethod" class="w-full px-3 py-2 border rounded-lg text-sm">
         <option value="cash">Efectivo</option>
         <option value="card">Tarjeta</option>
+        <option value="nequi">Nequi</option>
         <option value="mixed">Mixto</option>
       </select>
-      <div v-if="cart.paymentMethod !== 'card'">
+      <div v-if="cart.paymentMethod === 'cash' || cart.paymentMethod === 'mixed'">
         <label class="text-xs text-slate-500">Monto recibido</label>
         <input v-model.number="cart.amountPaid" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg" />
         <p v-if="cart.amountPaid > cart.total" class="text-sm text-green-600 mt-1">

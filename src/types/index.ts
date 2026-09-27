@@ -128,6 +128,7 @@ export interface CashSessionSummary {
   totalProfit: number
   cashTotal: number
   cardTotal: number
+  nequiTotal?: number
 }
 
 export interface CashSession {
@@ -161,7 +162,7 @@ export interface Sale {
   taxAmount: number
   total: number
   profit: number
-  paymentMethod: 'cash' | 'card' | 'mixed'
+  paymentMethod: 'cash' | 'card' | 'mixed' | 'nequi'
   status?: 'completed' | 'reversed'
   amountPaid?: number
   change?: number

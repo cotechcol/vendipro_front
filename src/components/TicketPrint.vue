@@ -13,6 +13,7 @@ const props = defineProps<{
 const paymentLabels: Record<string, string> = {
   cash: 'Efectivo',
   card: 'Tarjeta',
+  nequi: 'Nequi',
   mixed: 'Mixto',
 }
 
@@ -103,7 +104,7 @@ const itemCount = computed(() => props.sale.items.reduce((s, i) => s + i.quantit
         <span>Forma de pago</span>
         <span>{{ paymentLabels[sale.paymentMethod] || sale.paymentMethod }}</span>
       </div>
-      <div v-if="sale.amountPaid && sale.paymentMethod !== 'card'" class="ticket-row">
+      <div v-if="sale.amountPaid && (sale.paymentMethod === 'cash' || sale.paymentMethod === 'mixed')" class="ticket-row">
         <span>Recibido</span>
         <span>{{ formatMoney(sale.amountPaid) }}</span>
       </div>

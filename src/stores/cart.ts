@@ -24,7 +24,7 @@ function itemUnitPrice(item: CartItem): number {
 export const useCartStore = defineStore('cart', () => {
   const items = ref<CartItem[]>([])
   const customerId = ref<number | null>(null)
-  const paymentMethod = ref<'cash' | 'card' | 'mixed'>('cash')
+  const paymentMethod = ref<'cash' | 'card' | 'mixed' | 'nequi'>('cash')
   const amountPaid = ref<number>(0)
 
   const total = computed(() =>

@@ -34,7 +34,7 @@ const ticketSettings = ref<Setting | null>(null)
 const ticketRef = ref<InstanceType<typeof TicketPrint> | null>(null)
 const checkoutForm = ref({
   customerId: null as number | null,
-  paymentMethod: 'cash' as 'cash' | 'card' | 'mixed',
+  paymentMethod: 'cash' as 'cash' | 'card' | 'mixed' | 'nequi',
   amountPaid: 0,
 })
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
@@ -412,9 +412,9 @@ async function closeOrder() {
     const { data } = await api.post<{ sale: Sale }>(`/tables/orders/${order.value.id}/close`, {
       customerId: checkoutForm.value.customerId || undefined,
       paymentMethod: checkoutForm.value.paymentMethod,
-      amountPaid: checkoutForm.value.paymentMethod === 'card'
-        ? undefined
-        : checkoutForm.value.amountPaid,
+      amountPaid: checkoutForm.value.paymentMethod === 'cash' || checkoutForm.value.paymentMethod === 'mixed'
+        ? checkoutForm.value.amountPaid
+        : undefined,
     })
     const ticketRes = await api.get(`/sales/${data.sale.id}/ticket`)
     lastSale.value = ticketRes.data.sale
@@ -590,9 +590,10 @@ onMounted(load)
         <select v-model="checkoutForm.paymentMethod" class="w-full px-3 py-2 border rounded-lg text-sm">
           <option value="cash">Efectivo</option>
           <option value="card">Tarjeta</option>
+          <option value="nequi">Nequi</option>
           <option value="mixed">Mixto</option>
         </select>
-        <div v-if="checkoutForm.paymentMethod !== 'card'">
+        <div v-if="checkoutForm.paymentMethod === 'cash' || checkoutForm.paymentMethod === 'mixed'">
           <label class="text-xs text-slate-500">Monto recibido</label>
           <input v-model.number="checkoutForm.amountPaid" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg" />
           <p v-if="checkoutForm.amountPaid > (order?.total ?? 0)" class="text-sm text-green-600 mt-1">
