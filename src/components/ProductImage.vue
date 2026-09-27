@@ -18,7 +18,7 @@ const failed = ref(false)
 let fetchedForId = 0
 
 /** Cola compartida: evita N firmas en paralelo al abrir POS */
-const MAX_PARALLEL = 4
+const MAX_PARALLEL = 2
 let active = 0
 const queue: Array<() => void> = []
 
