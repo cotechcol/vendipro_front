@@ -1,15 +1,19 @@
 const TICKET_PRINT_CSS = `
   @page { size: 80mm auto; margin: 2mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Courier New', Courier, monospace; background: white; }
-  .ticket-receipt {
+  html, body {
     width: 76mm;
-    padding: 2mm;
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+  body { font-family: 'Courier New', Courier, monospace; }
+  .ticket-receipt {
+    width: 72mm;
+    padding: 0;
     font-size: 11px;
-    line-height: 1.45;
+    line-height: 1.35;
     color: #111;
-    page-break-inside: avoid;
-    break-inside: avoid;
   }
   .ticket-header { text-align: center; }
   .ticket-logo img { max-height: 48px; max-width: 120px; margin: 0 auto 8px; display: block; object-fit: contain; }
@@ -37,7 +41,8 @@ const TICKET_PRINT_CSS = `
 
 export function printHtmlElement(element: HTMLElement) {
   const iframe = document.createElement('iframe')
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;'
+  // Ancho real de la tirilla. En 0px el navegador parte cada palabra y la hoja sale larguísima.
+  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:80mm;height:200mm;border:none;'
   document.body.appendChild(iframe)
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document
@@ -59,8 +64,12 @@ export function printHtmlElement(element: HTMLElement) {
     return
   }
 
-  win.focus()
-  win.print()
+  const print = () => {
+    win.focus()
+    win.print()
+    setTimeout(() => document.body.removeChild(iframe), 1000)
+  }
 
-  setTimeout(() => document.body.removeChild(iframe), 500)
+  if (doc.readyState === 'complete') print()
+  else iframe.addEventListener('load', print, { once: true })
 }
