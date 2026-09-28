@@ -5,7 +5,7 @@ import api from '@/api/client'
 const props = defineProps<{
   productId: number
   imageUrl?: string | null
-  /** Si es false, no intenta cargar. Si es true/undefined, intenta /image-url */
+  /** Si es false, no intenta cargar. Si es true/undefined, intenta /image-urls */
   hasImage?: boolean | null
   alt?: string
   class?: string
@@ -17,30 +17,46 @@ const loading = ref(false)
 const failed = ref(false)
 let fetchedForId = 0
 
-/** Cola compartida: evita N firmas en paralelo al abrir POS */
-const MAX_PARALLEL = 2
-let active = 0
-const queue: Array<() => void> = []
+type Waiter = (url: string | null) => void
+const pending = new Map<number, Waiter[]>()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
 
-function runNext() {
-  while (active < MAX_PARALLEL && queue.length) {
-    active++
-    queue.shift()!()
-  }
+function requestImageUrl(id: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const waiters = pending.get(id) ?? []
+    waiters.push(resolve)
+    pending.set(id, waiters)
+    if (flushTimer == null) {
+      flushTimer = setTimeout(() => {
+        flushTimer = null
+        void flushImageUrls()
+      }, 50)
+    }
+  })
 }
 
-function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    queue.push(() => {
-      fn()
-        .then(resolve, reject)
-        .finally(() => {
-          active--
-          runNext()
-        })
-    })
-    runNext()
-  })
+async function flushImageUrls() {
+  const waiters = new Map(pending)
+  pending.clear()
+  const ids = [...waiters.keys()]
+  if (!ids.length) return
+
+  const deliver = (id: number, url: string | null) => {
+    for (const waiter of waiters.get(id) ?? []) waiter(url)
+  }
+
+  try {
+    const { data } = await api.post<{ urls: Record<string, string> }>(
+      '/products/image-urls',
+      { ids },
+      { skipLoading: true },
+    )
+    for (const id of ids) {
+      deliver(id, data?.urls?.[id] || data?.urls?.[String(id)] || null)
+    }
+  } catch {
+    for (const id of ids) deliver(id, null)
+  }
 }
 
 function shouldTryFetch(): boolean {
@@ -58,14 +74,10 @@ async function ensureUrl() {
   fetchedForId = props.productId
   failed.value = false
   try {
-    const { data } = await enqueue(() =>
-      api.get<{ imageUrl: string }>(`/products/${props.productId}/image-url`, {
-        skipLoading: true,
-      }),
-    )
-    if (fetchedForId === props.productId && data?.imageUrl) {
-      resolvedUrl.value = data.imageUrl
-    } else {
+    const url = await requestImageUrl(props.productId)
+    if (fetchedForId === props.productId && url) {
+      resolvedUrl.value = url
+    } else if (fetchedForId === props.productId) {
       failed.value = true
     }
   } catch {
