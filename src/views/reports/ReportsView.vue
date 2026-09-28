@@ -6,6 +6,8 @@ import api from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
+import ReprintTicket from '@/components/ReprintTicket.vue'
+import Toast from '@/components/Toast.vue'
 import { formatMoney, formatDate, todayColombia, daysAgoColombia } from '@/utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler)
@@ -15,6 +17,9 @@ const tab = ref<'sales' | 'products' | 'profitability'>('sales')
 const from = ref(getWeekAgo())
 const to = ref(today())
 const loading = ref(false)
+const reprintRef = ref<InstanceType<typeof ReprintTicket> | null>(null)
+const printingId = ref<number | null>(null)
+const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
 
 const salesReport = ref<{ sales: SaleRow[]; summary: Summary } | null>(null)
 const productsReport = ref<{ products: ProductRow[]; summary: ProductSummary } | null>(null)
@@ -33,6 +38,18 @@ interface SaleRow {
 interface Summary { count: number; revenue: number; profit: number; tax: number }
 interface ProductRow { name: string; category: string; quantity: number; revenue: number; cost: number; profit: number; margin: number }
 interface ProductSummary { totalProducts: number; totalUnits: number; revenue: number; profit: number }
+
+async function reprint(id: number) {
+  printingId.value = id
+  try {
+    await reprintRef.value?.print(id)
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    toast.value = { show: true, message: msg || 'No se pudo imprimir el recibo', type: 'error' }
+  } finally {
+    printingId.value = null
+  }
+}
 
 function today() { return todayColombia() }
 function getWeekAgo() { return daysAgoColombia(7) }
@@ -237,6 +254,7 @@ onMounted(loadTab)
                 <th class="text-left px-6 py-3 font-medium">Estado</th>
                 <th class="text-right px-6 py-3 font-medium">Total</th>
                 <th class="text-right px-6 py-3 font-medium">Ganancia</th>
+                <th class="text-right px-6 py-3 font-medium">Recibo</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -263,6 +281,15 @@ onMounted(loadTab)
                 </td>
                 <td class="px-6 py-3 text-right" :class="s.status === 'reversed' ? 'text-slate-400 line-through' : 'text-emerald-600'">
                   {{ formatMoney(Number(s.profit)) }}
+                </td>
+                <td class="px-6 py-3 text-right">
+                  <button
+                    class="text-xs font-medium text-brand-700 hover:underline disabled:opacity-50"
+                    :disabled="printingId === s.id"
+                    @click="reprint(s.id)"
+                  >
+                    {{ printingId === s.id ? '...' : 'Imprimir' }}
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -347,5 +374,8 @@ onMounted(loadTab)
         </div>
       </div>
     </template>
+
+    <Toast v-if="toast.show" :message="toast.message" :type="toast.type" @close="toast.show = false" />
+    <ReprintTicket ref="reprintRef" />
   </div>
 </template>

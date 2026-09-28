@@ -5,6 +5,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
+import ReprintTicket from '@/components/ReprintTicket.vue'
 import { formatMoney, formatDate, todayColombia, daysAgoColombia } from '@/utils/format'
 
 interface SaleItemRow {
@@ -52,6 +53,8 @@ const detailSale = ref<SaleRow | null>(null)
 const reverseReason = ref('')
 const detailLoading = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
+const reprintRef = ref<InstanceType<typeof ReprintTicket> | null>(null)
+const printingId = ref<number | null>(null)
 
 const paymentLabels: Record<string, string> = {
   cash: 'Efectivo',
@@ -114,6 +117,18 @@ async function confirmReverse() {
     }
   } finally {
     reversing.value = false
+  }
+}
+
+async function reprint(id: number) {
+  printingId.value = id
+  try {
+    await reprintRef.value?.print(id)
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    toast.value = { show: true, message: msg || 'No se pudo imprimir el recibo', type: 'error' }
+  } finally {
+    printingId.value = null
   }
 }
 
@@ -226,6 +241,13 @@ onMounted(load)
               </td>
               <td class="px-5 py-3 text-right space-x-3 whitespace-nowrap">
                 <button
+                  class="text-xs font-medium text-brand-700 hover:underline disabled:opacity-50"
+                  :disabled="printingId === s.id"
+                  @click="reprint(s.id)"
+                >
+                  {{ printingId === s.id ? '...' : 'Imprimir' }}
+                </button>
+                <button
                   class="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
                   @click="openDetail(s)"
                 >
@@ -334,7 +356,15 @@ onMounted(load)
         </div>
       </div>
       <template #footer>
-        <button class="btn-secondary" @click="showDetailModal = false">Cerrar</button>
+        <button class="btn-ghost" @click="showDetailModal = false">Cerrar</button>
+        <button
+          v-if="detailSale"
+          class="btn-secondary"
+          :disabled="printingId === detailSale.id"
+          @click="reprint(detailSale.id)"
+        >
+          {{ printingId === detailSale.id ? 'Imprimiendo...' : 'Imprimir recibo' }}
+        </button>
         <button
           v-if="detailSale && detailSale.status !== 'reversed'"
           class="btn-primary !bg-red-600 hover:!bg-red-700"
@@ -346,5 +376,6 @@ onMounted(load)
     </AppModal>
 
     <Toast v-if="toast.show" :message="toast.message" :type="toast.type" @close="toast.show = false" />
+    <ReprintTicket ref="reprintRef" />
   </div>
 </template>
