@@ -72,13 +72,19 @@ export function calculateItemUnitPrice(
   product: {
     productType?: string
     salePrice: number
+    unitSalePrice?: number | null
     variableScoops?: boolean
     scoopPrices?: number[] | null
     optionGroups?: { kind: string; options: ProductOption[] }[]
   },
   selectedOptionIds?: number[],
   portionScoopCount?: number,
+  soldAsUnit?: boolean,
 ): number {
+  if (product.productType === 'packaged') {
+    return Number(soldAsUnit ? product.unitSalePrice : product.salePrice) || 0
+  }
+
   let price = Number(product.salePrice)
 
   if (

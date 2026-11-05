@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/api/client'
 import AppModal from '@/components/AppModal.vue'
 import ProductOptionsModal from '@/components/ProductOptionsModal.vue'
+import PackSaleModal from '@/components/PackSaleModal.vue'
 import ProductImage from '@/components/ProductImage.vue'
 import TicketPrint from '@/components/TicketPrint.vue'
 import Toast from '@/components/Toast.vue'
@@ -27,6 +28,8 @@ const loading = ref(true)
 const processing = ref(false)
 const optionsProduct = ref<Product | null>(null)
 const showOptions = ref(false)
+const packProduct = ref<Product | null>(null)
+const showPackSale = ref(false)
 const showCheckout = ref(false)
 const showSuccess = ref(false)
 const lastSale = ref<Sale | null>(null)
@@ -181,12 +184,13 @@ async function reloadOrderQuiet() {
   }
 }
 
-function findExistingSimpleLine(productId: number) {
+function findExistingSimpleLine(productId: number, soldAsUnit = false) {
   return (order.value?.items ?? []).find((i) => (
     i.id > 0
     && i.productId === productId
     && !(i.selectedOptionIds?.length)
     && !i.portionScoopCount
+    && Boolean(i.soldAsUnit) === soldAsUnit
   ))
 }
 
@@ -205,6 +209,12 @@ async function addProduct(product: Product) {
       toast.value = { show: true, message: 'No se pudieron cargar las opciones', type: 'error' }
       return
     }
+  }
+
+  if (detailed.productType === 'packaged') {
+    packProduct.value = detailed
+    showPackSale.value = true
+    return
   }
 
   if (detailed.optionGroups?.length) {

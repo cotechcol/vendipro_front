@@ -120,8 +120,19 @@ export function productTypeLabel(type: string): string {
     portion: 'Porción de venta',
     composite: 'Compuesto (receta)',
     prepared: 'Elaborado (producción)',
+    packaged: 'Caja / unidad',
   }
   return labels[type] ?? type
+}
+
+export function formatPackStock(
+  stock: number | string,
+  looseUnits: number | string | null | undefined,
+): string {
+  const packs = Math.floor(toNumber(stock))
+  const loose = Math.floor(toNumber(looseUnits))
+  if (loose > 0) return `${formatNumber(packs, 0)} cajas + ${formatNumber(loose, 0)} uds`
+  return `${formatNumber(packs, 0)} cajas`
 }
 export function todayColombia(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: COLOMBIA_TZ }).format(new Date())

@@ -7,10 +7,24 @@ function buildCartKey(
   productId: number,
   selectedOptionIds?: number[],
   portionScoopCount?: number,
+  soldAsUnit?: boolean,
 ): string {
   const opts = (selectedOptionIds ?? []).slice().sort((a, b) => a - b).join(',')
   const scoop = portionScoopCount ? `:s${portionScoopCount}` : ''
-  return opts ? `${productId}:${opts}${scoop}` : `${productId}${scoop}`
+  const pack = soldAsUnit ? ':u' : ''
+  return opts ? `${productId}:${opts}${scoop}${pack}` : `${productId}${scoop}${pack}`
+}
+
+function packTotalUnits(product: Product): number {
+  const per = Math.max(1, Math.floor(Number(product.unitsPerPack) || 1))
+  return Math.floor(Number(product.stock) || 0) * per
+    + Math.floor(Number(product.looseUnits) || 0)
+}
+
+function itemUnits(item: CartItem): number {
+  if (item.product.productType !== 'packaged') return item.quantity
+  const per = Math.max(1, Math.floor(Number(item.product.unitsPerPack) || 1))
+  return item.soldAsUnit ? item.quantity : item.quantity * per
 }
 
 function itemUnitPrice(item: CartItem): number {
@@ -18,6 +32,7 @@ function itemUnitPrice(item: CartItem): number {
     item.product,
     item.selectedOptionIds,
     item.portionScoopCount,
+    item.soldAsUnit,
   )
 }
 
@@ -35,7 +50,15 @@ export const useCartStore = defineStore('cart', () => {
     items.value.reduce((sum, i) => sum + i.quantity, 0),
   )
 
-  function maxQty(product: Product): number {
+  function maxQty(product: Product, soldAsUnit?: boolean, exceptKey?: string): number {
+    if (product.productType === 'packaged') {
+      const per = Math.max(1, Math.floor(Number(product.unitsPerPack) || 1))
+      const reserved = items.value
+        .filter((i) => i.product.id === product.id && i.cartKey !== exceptKey)
+        .reduce((sum, i) => sum + itemUnits(i), 0)
+      const available = Math.max(0, packTotalUnits(product) - reserved)
+      return soldAsUnit ? available : Math.floor(available / per)
+    }
     return product.sellableUnits ?? Math.floor(Number(product.stock))
   }
 
@@ -45,14 +68,20 @@ export const useCartStore = defineStore('cart', () => {
     optionLabel?: string,
     unitPrice?: number,
     portionScoopCount?: number,
+    soldAsUnit?: boolean,
   ) {
-    const cartKey = buildCartKey(product.id, selectedOptionIds, portionScoopCount)
-    const max = maxQty(product)
-    const price = unitPrice ?? calculateItemUnitPrice(product, selectedOptionIds, portionScoopCount)
+    const cartKey = buildCartKey(product.id, selectedOptionIds, portionScoopCount, soldAsUnit)
+    const max = maxQty(product, soldAsUnit, cartKey)
+    const price = unitPrice ?? calculateItemUnitPrice(
+      product,
+      selectedOptionIds,
+      portionScoopCount,
+      soldAsUnit,
+    )
     const existing = items.value.find((i) => i.cartKey === cartKey)
     if (existing) {
       if (existing.quantity < max) existing.quantity++
-    } else {
+    } else if (max >= 1) {
       items.value.push({
         product,
         quantity: 1,
@@ -60,6 +89,7 @@ export const useCartStore = defineStore('cart', () => {
         optionLabel,
         unitPrice: price,
         portionScoopCount,
+        soldAsUnit,
         cartKey,
       })
     }
@@ -71,7 +101,7 @@ export const useCartStore = defineStore('cart', () => {
     if (!item) return
     if (quantity <= 0) {
       removeItem(cartKey)
-    } else if (quantity <= maxQty(item.product)) {
+    } else if (quantity <= maxQty(item.product, item.soldAsUnit, cartKey)) {
       item.quantity = quantity
     }
     amountPaid.value = total.value

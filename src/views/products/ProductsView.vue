@@ -7,7 +7,7 @@ import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ProductImage from '@/components/ProductImage.vue'
 import type { Product, Category, ProductType, StockUnit, ProductRecipe } from '@/types'
-import { formatMoney, formatStock, productTypeLabel, stockUnitLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
+import { formatMoney, formatStock, formatPackStock, productTypeLabel, stockUnitLabel, parseDecimalInput, formatCostInput } from '@/utils/format'
 
 type NameRow = { name: string }
 
@@ -63,6 +63,8 @@ const form = ref({
   recipe: [] as ProductRecipe[],
   recipeBatchSize: 1000,
   addonOptions: [] as AddonRow[],
+  unitsPerPack: 20,
+  unitSalePrice: 0,
 })
 
 const productTypeOptions: { value: ProductType; label: string }[] = [
@@ -71,6 +73,7 @@ const productTypeOptions: { value: ProductType; label: string }[] = [
   { value: 'prepared', label: 'Elaborado (producción)' },
   { value: 'portion', label: 'Porción de venta' },
   { value: 'composite', label: 'Compuesto (receta)' },
+  { value: 'packaged', label: 'Caja / unidad (cigarrillos)' },
 ]
 
 const portionSizeLabel = computed(() => {
@@ -189,6 +192,7 @@ function estimatedPreparedUnitCost(): number {
 
 function stockDisplay(p: Product): string {
   if (p.productType === 'bulk' || p.productType === 'prepared') return formatStock(p.stock, p.stockUnit)
+  if (p.productType === 'packaged') return formatPackStock(p.stock, p.looseUnits)
   if (p.productType === 'portion' || p.productType === 'composite') {
     const avail = p.sellableUnits ?? 0
     return `${avail} disp.`
@@ -197,7 +201,7 @@ function stockDisplay(p: Product): string {
 }
 
 function isLow(p: Product): boolean {
-  if (p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared') {
+  if (p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared' || p.productType === 'packaged') {
     return Number(p.stock) <= Number(p.minStock)
   }
   return (p.sellableUnits ?? 0) <= 0
@@ -353,7 +357,8 @@ function resetForm() {
     useOptions: false,
     containerOptions: [{ name: 'Galleta' }, { name: 'Vaso' }],
     salePrice: 0, costPrice: 0, stock: 0, minStock: 5,
-    categoryId: undefined, visibleInPos: true, recipe: [], recipeBatchSize: 1000, addonOptions: [],
+    categoryId: undefined, visibleInPos: true, recipe: [],     recipeBatchSize: 1000, addonOptions: [],
+    unitsPerPack: 20, unitSalePrice: 0,
   }
   clearImageState()
 }
@@ -417,6 +422,8 @@ async function openEdit(p: Product) {
       unit: r.unit,
     })),
     recipeBatchSize: Number(product.recipeBatchSize) || 1000,
+    unitsPerPack: Number(product.unitsPerPack) || 20,
+    unitSalePrice: Number(product.unitSalePrice) || 0,
     addonOptions: addonGroup?.options.map((o) => ({
       name: o.name,
       ingredientProductId: o.ingredientProductId ?? 0,
@@ -499,6 +506,10 @@ watch(() => form.value.productType, (type) => {
   if (type === 'prepared' && form.value.recipe.length === 0) addRecipeLine()
   if (type === 'composite' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
   if (type === 'simple' && form.value.addonOptions.length === 0 && !editing.value) addAddonOption()
+  if (type === 'packaged') {
+    form.value.stockUnit = 'unit'
+    if (!form.value.unitsPerPack) form.value.unitsPerPack = 20
+  }
 })
 
 async function save() {
@@ -576,6 +587,22 @@ async function save() {
       payload.recipe = form.value.recipe.filter((r) => r.ingredientProductId && r.quantity > 0)
       payload.optionGroups = buildAddonOptionGroups()
       delete payload.addonOptions
+    } else if (form.value.productType === 'packaged') {
+      delete payload.baseProductId
+      delete payload.portionSize
+      delete payload.recipe
+      delete payload.recipeBatchSize
+      delete payload.variableScoops
+      delete payload.scoopPrices
+      delete payload.scoopCount
+      delete payload.useOptions
+      delete payload.containerOptions
+      delete payload.addonOptions
+      delete payload.optionGroups
+      delete payload.looseUnits
+      payload.stockUnit = 'unit'
+      payload.unitsPerPack = Number(form.value.unitsPerPack)
+      payload.unitSalePrice = Number(form.value.unitSalePrice)
     } else {
       delete payload.baseProductId
       delete payload.portionSize
@@ -585,6 +612,8 @@ async function save() {
       delete payload.scoopCount
       delete payload.useOptions
       delete payload.containerOptions
+      delete payload.unitsPerPack
+      delete payload.unitSalePrice
       payload.stockUnit = 'unit'
       payload.optionGroups = buildAddonOptionGroups()
       delete payload.addonOptions
@@ -706,7 +735,12 @@ onMounted(load)
               <td class="px-4 py-3 text-slate-500">{{ productTypeLabel(p.productType) }}</td>
               <td class="px-4 py-3 text-slate-500">{{ p.category?.name || '-' }}</td>
               <td class="px-4 py-3 text-right">
-                {{ p.productType === 'bulk' || p.productType === 'prepared' ? '—' : formatMoney(Number(p.salePrice)) }}
+                <template v-if="p.productType === 'bulk' || p.productType === 'prepared'">—</template>
+                <template v-else-if="p.productType === 'packaged'">
+                  {{ formatMoney(Number(p.salePrice)) }}
+                  <span class="block text-xs text-slate-400 font-normal">{{ formatMoney(Number(p.unitSalePrice)) }} / ud</span>
+                </template>
+                <template v-else>{{ formatMoney(Number(p.salePrice)) }}</template>
               </td>
               <td class="px-4 py-3 text-right" :class="isLow(p) ? 'text-red-600 font-semibold' : ''">
                 {{ stockDisplay(p) }}
@@ -1129,6 +1163,43 @@ onMounted(load)
               </div>
             </div>
           </div>
+        </template>
+
+        <!-- Caja / unidad (cigarrillos) -->
+        <template v-if="form.productType === 'packaged'">
+          <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-900">
+            El inventario se guarda en cajas. Al vender unidades sueltas, cuando se complete esa cantidad se descuenta una caja.
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium">Unidades por caja</label>
+              <input v-model.number="form.unitsPerPack" type="number" min="2" step="1" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+              <p class="text-xs text-slate-500 mt-1">Ej: 20 cigarrillos</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium">Precio de la caja</label>
+              <input v-model.number="form.salePrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Precio por unidad</label>
+              <input v-model.number="form.unitSalePrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Costo de la caja</label>
+              <input v-model.number="form.costPrice" type="number" step="0.01" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+            </div>
+            <div v-if="!editing">
+              <label class="text-sm font-medium">Cajas iniciales</label>
+              <input v-model.number="form.stock" type="number" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Stock mínimo (cajas)</label>
+              <input v-model.number="form.minStock" type="number" min="0" class="w-full mt-1 px-3 py-2 border rounded-lg" />
+            </div>
+          </div>
+          <p v-if="editing" class="text-sm text-slate-500">
+            Inventario actual: {{ formatPackStock(editing.stock, editing.looseUnits) }}
+          </p>
         </template>
 
         <!-- Simple -->

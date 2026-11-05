@@ -8,6 +8,7 @@ import Toast from '@/components/Toast.vue'
 import TicketPrint from '@/components/TicketPrint.vue'
 import CartPanel from '@/components/CartPanel.vue'
 import ProductOptionsModal from '@/components/ProductOptionsModal.vue'
+import PackSaleModal from '@/components/PackSaleModal.vue'
 import ProductImage from '@/components/ProductImage.vue'
 import type { Product, Category, Customer, Sale, Setting } from '@/types'
 
@@ -31,6 +32,8 @@ const ticketRef = ref<InstanceType<typeof TicketPrint> | null>(null)
 const toast = ref({ show: false, message: '', type: 'error' as 'success' | 'error' })
 const optionsProduct = ref<Product | null>(null)
 const showOptions = ref(false)
+const packProduct = ref<Product | null>(null)
+const showPackSale = ref(false)
 const productDetailCache = ref<Map<number, Product>>(new Map())
 
 const filtered = computed(() => {
@@ -74,6 +77,7 @@ async function checkout() {
         quantity: i.quantity,
         selectedOptionIds: i.selectedOptionIds,
         portionScoopCount: i.portionScoopCount,
+        soldAsUnit: i.soldAsUnit || undefined,
       })),
       customerId: cart.customerId || undefined,
       paymentMethod: cart.paymentMethod,
@@ -140,6 +144,9 @@ async function resolveProductDetail(product: Product): Promise<Product> {
 }
 
 function displayPrice(p: Product): string {
+  if (p.productType === 'packaged') {
+    return `${formatMoney(Number(p.salePrice))} / ${formatMoney(Number(p.unitSalePrice))}`
+  }
   if (p.variableScoops && p.scoopPrices?.length) {
     const min = Math.min(...p.scoopPrices.map(Number))
     const max = Math.max(...p.scoopPrices.map(Number))
@@ -177,6 +184,12 @@ async function handleProductClick(p: Product) {
     }
   }
 
+  if (product.productType === 'packaged') {
+    packProduct.value = product
+    showPackSale.value = true
+    return
+  }
+
   if (product.optionGroups?.length) {
     optionsProduct.value = product
     showOptions.value = true
@@ -206,6 +219,18 @@ function onOptionsConfirm(
   }
   showOptions.value = false
   optionsProduct.value = null
+}
+
+function onPackSaleConfirm(soldAsUnit: boolean) {
+  if (packProduct.value) {
+    const label = soldAsUnit ? 'Unidad' : 'Caja'
+    const price = soldAsUnit
+      ? Number(packProduct.value.unitSalePrice)
+      : Number(packProduct.value.salePrice)
+    cart.addProduct(packProduct.value, undefined, label, price, undefined, soldAsUnit)
+  }
+  showPackSale.value = false
+  packProduct.value = null
 }
 
 function closeOptions() {
@@ -349,6 +374,13 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
       :product="optionsProduct"
       @close="closeOptions"
       @confirm="onOptionsConfirm"
+    />
+
+    <PackSaleModal
+      :show="showPackSale"
+      :product="packProduct"
+      @close="showPackSale = false; packProduct = null"
+      @confirm="onPackSaleConfirm"
     />
 
     <Toast v-if="toast.show" :message="toast.message" :type="toast.type" @close="toast.show = false" />

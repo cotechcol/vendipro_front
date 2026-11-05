@@ -29,7 +29,7 @@ export interface Category {
   active: boolean
 }
 
-export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite' | 'prepared'
+export type ProductType = 'simple' | 'bulk' | 'portion' | 'composite' | 'prepared' | 'packaged'
 export type StockUnit = 'unit' | 'g' | 'ml'
 export type OptionGroupKind = 'flavor' | 'container' | 'addon'
 
@@ -75,6 +75,9 @@ export interface Product {
   scoopCount?: number | null
   variableScoops?: boolean
   scoopPrices?: number[] | null
+  unitsPerPack?: number | null
+  unitSalePrice?: number | null
+  looseUnits?: number
   optionGroups?: ProductOptionGroup[]
   recipe?: ProductRecipe[]
   salePrice: number
@@ -182,6 +185,7 @@ export interface CartItem {
   optionLabel?: string
   unitPrice?: number
   portionScoopCount?: number
+  soldAsUnit?: boolean
   cartKey: string
 }
 
@@ -195,6 +199,7 @@ export interface TableOrderItem {
   selectedOptionIds?: number[] | null
   optionLabel?: string | null
   portionScoopCount?: number | null
+  soldAsUnit?: boolean
   notes?: string | null
   createdAt?: string
 }
