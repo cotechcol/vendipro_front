@@ -68,12 +68,12 @@ const form = ref({
 })
 
 const productTypeOptions: { value: ProductType; label: string }[] = [
-  { value: 'simple', label: 'Unidad' },
-  { value: 'bulk', label: 'Insumo base' },
-  { value: 'prepared', label: 'Elaborado (producción)' },
-  { value: 'portion', label: 'Porción de venta' },
-  { value: 'composite', label: 'Compuesto (receta)' },
+  { value: 'simple', label: 'Unidad (botella, paquete…)' },
   { value: 'packaged', label: 'Caja / unidad (cigarrillos)' },
+  { value: 'bulk', label: 'Insumo base (helado, pan, envase… en g/ml/uds)' },
+  { value: 'prepared', label: 'Elaborado / producción (salsa de la casa…)' },
+  { value: 'portion', label: 'Porción de venta (bola 90 g…)' },
+  { value: 'composite', label: 'Compuesto / receta (hamburguesa…)' },
 ]
 
 const portionSizeLabel = computed(() => {
@@ -775,11 +775,7 @@ onMounted(load)
           <div>
             <label class="text-sm font-medium">Tipo de producto</label>
             <select v-model="form.productType" class="w-full mt-1 px-3 py-2 border rounded-lg" :disabled="!!editing">
-              <option value="simple">Unidad (botella, paquete…)</option>
-              <option value="bulk">Insumo base (helado, pan, envase… en g/ml/uds)</option>
-              <option value="prepared">Elaborado / producción (salsa de la casa…)</option>
-              <option value="portion">Porción de venta (bola 90 g…)</option>
-              <option value="composite">Compuesto / receta (hamburguesa…)</option>
+              <option v-for="opt in productTypeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
             </select>
           </div>
           <div><label class="text-sm font-medium">SKU</label><input v-model="form.sku" class="w-full mt-1 px-3 py-2 border rounded-lg" /></div>
