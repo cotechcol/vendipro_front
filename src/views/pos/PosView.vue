@@ -305,6 +305,9 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
             <p class="font-semibold text-sm leading-tight">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
             <p v-if="!isAvailable(p)" class="text-xs text-red-500 font-medium mt-1">Sin stock</p>
+            <p v-else-if="p.productType === 'packaged'" class="text-xs text-primary-600 font-medium mt-1">
+              Toca para caja o unidad
+            </p>
             <p v-else-if="hasConfigurableOptions(p)" class="text-xs text-primary-600 font-medium mt-1">
               {{ optionsHint(p) }}
             </p>

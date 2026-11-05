@@ -156,6 +156,7 @@ export interface SaleItem {
   unitPrice: number
   unitCost?: number
   subtotal: number
+  soldAsUnit?: boolean
 }
 
 export interface Sale {

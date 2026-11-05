@@ -247,6 +247,7 @@ async function persistItem(
     selectedOptionIds?: number[]
     optionLabel?: string
     portionScoopCount?: number
+    soldAsUnit?: boolean
   },
   productHint?: Product,
 ) {
@@ -262,17 +263,24 @@ async function persistItem(
   if (isSimpleAdd && product) {
     snapshot = cloneOrder(order.value)
     tempId = -Date.now()
-    const unitPrice = Number(product.salePrice ?? 0)
+    const soldAsUnit = Boolean(payload.soldAsUnit)
+    const unitPrice = soldAsUnit
+      ? Number(product.unitSalePrice ?? 0)
+      : Number(product.salePrice ?? 0)
+    const optionLabel = product.productType === 'packaged'
+      ? (soldAsUnit ? 'Unidad' : 'Caja')
+      : payload.optionLabel ?? null
     const tempItem: TableOrderItem = {
       id: tempId,
       orderId: order.value.id,
       productId: product.id,
-      productName: product.name,
+      productName: optionLabel ? `${product.name} (${optionLabel})` : product.name,
       quantity: 1,
       unitPrice,
       selectedOptionIds: null,
-      optionLabel: null,
+      optionLabel,
       portionScoopCount: null,
+      soldAsUnit,
     }
     setOrderItems([...order.value.items, tempItem])
   }
@@ -288,6 +296,23 @@ async function persistItem(
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     toast.value = { show: true, message: msg || 'No se pudo agregar el producto', type: 'error' }
   }
+}
+
+function onPackSaleConfirm(soldAsUnit: boolean) {
+  if (!packProduct.value) return
+  const product = packProduct.value
+  showPackSale.value = false
+  packProduct.value = null
+  const existing = findExistingSimpleLine(product.id, soldAsUnit)
+  if (existing) {
+    updateQuantity(existing.id, Number(existing.quantity) + 1)
+    return
+  }
+  void persistItem({
+    productId: product.id,
+    soldAsUnit,
+    optionLabel: soldAsUnit ? 'Unidad' : 'Caja',
+  }, product)
 }
 
 async function onOptionsConfirm(
@@ -520,7 +545,11 @@ onMounted(load)
             <p class="font-semibold text-sm text-slate-900 line-clamp-2">{{ p.name }}</p>
             <p class="text-xs text-slate-400 mt-1">{{ p.sku }}</p>
             <div class="flex justify-between items-end mt-3">
-              <span class="font-bold text-primary-700">{{ formatMoney(Number(p.salePrice)) }}</span>
+              <span class="font-bold text-primary-700">
+                {{ p.productType === 'packaged'
+                  ? `${formatMoney(Number(p.salePrice))} / ${formatMoney(Number(p.unitSalePrice))}`
+                  : formatMoney(Number(p.salePrice)) }}
+              </span>
               <span class="text-[11px]" :class="isAvailable(p) ? 'text-emerald-600' : 'text-red-500'">
                 {{ isAvailable(p) ? `${sellableCount(p)} disp.` : 'Agotado' }}
               </span>
@@ -589,6 +618,13 @@ onMounted(load)
       :product="optionsProduct"
       @close="showOptions = false"
       @confirm="onOptionsConfirm"
+    />
+
+    <PackSaleModal
+      :show="showPackSale"
+      :product="packProduct"
+      @close="showPackSale = false; packProduct = null"
+      @confirm="onPackSaleConfirm"
     />
 
     <AppModal title="Cobrar mesa" :show="showCheckout" @close="showCheckout = false">

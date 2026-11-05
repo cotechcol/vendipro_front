@@ -5,7 +5,7 @@ import AppModal from '@/components/AppModal.vue'
 import Toast from '@/components/Toast.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
-import { formatMoney, formatDate, formatStock, formatQuantity, formatMovementQty, formatMovementStock, stockUnitLabel } from '@/utils/format'
+import { formatMoney, formatDate, formatStock, formatPackStock, formatQuantity, formatMovementQty, formatMovementStock, stockUnitLabel } from '@/utils/format'
 import type { Product, Category } from '@/types'
 
 interface Movement {
@@ -102,6 +102,13 @@ function stockStatus(p: Product): 'ok' | 'low' | 'out' {
     if (avail <= 0) return 'out'
     return 'ok'
   }
+  if (p.productType === 'packaged') {
+    const packs = Number(p.stock)
+    const loose = Number(p.looseUnits ?? 0)
+    if (packs <= 0 && loose <= 0) return 'out'
+    if (packs <= min) return 'low'
+    return 'ok'
+  }
   if (stock <= 0) return 'out'
   if (stock <= min) return 'low'
   return 'ok'
@@ -111,11 +118,12 @@ function stockLabel(p: Product): string {
   if (p.productType === 'portion' || p.productType === 'composite') {
     return `${p.sellableUnits ?? 0} disp.`
   }
+  if (p.productType === 'packaged') return formatPackStock(p.stock, p.looseUnits)
   return formatStock(p.stock, p.stockUnit)
 }
 
 function isAdjustable(p: Product): boolean {
-  return p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared'
+  return p.productType === 'simple' || p.productType === 'bulk' || p.productType === 'prepared' || p.productType === 'packaged'
 }
 
 const adjustableProducts = computed(() =>
@@ -550,7 +558,7 @@ onMounted(load)
               </td>
               <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ stockLabel(p) }}</td>
               <td class="px-4 py-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
-                {{ p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared' ? formatStock(p.minStock, p.stockUnit) : '—' }}
+                {{ p.productType === 'bulk' || p.productType === 'simple' || p.productType === 'prepared' || p.productType === 'packaged' ? formatStock(p.minStock, p.productType === 'packaged' ? 'unit' : p.stockUnit) : '—' }}
               </td>
               <td class="px-4 py-3 text-right text-slate-600 hidden lg:table-cell tabular-nums">
                 {{ formatMoney(Number(p.costPrice) * Number(p.stock)) }}
@@ -695,7 +703,9 @@ onMounted(load)
             </select>
           </div>
           <div>
-            <label class="text-sm font-medium text-slate-700">Cantidad</label>
+            <label class="text-sm font-medium text-slate-700">
+              {{ selectedProduct?.productType === 'packaged' ? 'Cantidad (cajas)' : 'Cantidad' }}
+            </label>
             <input
               v-model.number="form.quantity"
               type="number"
@@ -703,6 +713,9 @@ onMounted(load)
               step="0.001"
               class="w-full mt-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm"
             />
+            <p v-if="selectedProduct?.productType === 'packaged'" class="text-xs text-slate-500 mt-1">
+              El inventario de cigarrillos se mueve por cajas. Las unidades sueltas se descuentan al vender.
+            </p>
           </div>
         </div>
         <div v-if="isPreparedProduction" class="rounded-xl border border-teal-200 bg-teal-50 p-4 space-y-2">
